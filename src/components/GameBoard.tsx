@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import Swal from "sweetalert2";
 import "sweetalert2/dist/sweetalert2.min.css";
 
@@ -94,6 +94,21 @@ const GameBoard = () => {
 
   const growRef = useRef(0);
   const angleRef = useRef(0);
+
+  // ✅ CALCULAR RADIO REACTIVO CON USEMEMO (SOLUCIÓN AL BUG DE PRODUCCIÓN)
+  const snakeRadius = useMemo(() => {
+    return SIZE / 2 + (snake.length * 0.3);
+  }, [snake.length]);
+
+  // ✅ CALCULAR DISTANCIA AL CURSOR
+  const distanceToMouse = useMemo(() => {
+    if (snake.length === 0) return 0;
+    const head = snake[0];
+    return dist(
+      { x: head.x + SIZE / 2, y: head.y + SIZE / 2 },
+      target.current
+    );
+  }, [snake, target.current]);
 
   // Pedir SIEMPRE el nombre de usuario al entrar con SweetAlert2
   useEffect(() => {
@@ -269,7 +284,7 @@ const GameBoard = () => {
         setSnake((currentSnake) => {
           if (currentSnake.length === 0) return currentSnake;
           const head = currentSnake[0];
-          const snakeRadius = SIZE / 2 + (currentSnake.length * 0.3);
+          const currentSnakeRadius = SIZE / 2 + (currentSnake.length * 0.3);
 
           // Verificar colisión con comida
           setFoods((currentFoods) => {
@@ -281,6 +296,7 @@ const GameBoard = () => {
               if (d < (food.r + SIZE / 2) * 1.2) {
                 totalGrowBy += 10;
                 setScore((s) => s + 5);
+                console.log(`🍬 COMIDA! Crecimiento: +10, Total pendiente: ${totalGrowBy}`);
                 return false;
               }
               return true;
@@ -311,13 +327,13 @@ const GameBoard = () => {
                 if (distance < SIZE * 1.2) {
                   // ✅ SI ES LA CABEZA (i === 0) - COMPARAR TAMAÑOS
                   if (i === 0) {
-                    if (snakeRadius > botRadius) {
-                      console.log(`🍽️ COMISTE CABEZA! Tu: ${snakeRadius.toFixed(1)} vs Bot: ${botRadius.toFixed(1)}`);
+                    if (currentSnakeRadius > botRadius) {
+                      console.log(`🍽️ COMISTE CABEZA! Tu: ${currentSnakeRadius.toFixed(1)} vs Bot: ${botRadius.toFixed(1)}`);
                       totalGrowBy += bot.segments.length * 2;
                       setScore((s) => s + bot.segments.length);
                       botShouldBeRemoved = true;
                     } else {
-                      console.log(`💀 PERDISTE VS CABEZA! Tu: ${snakeRadius.toFixed(1)} vs Bot: ${botRadius.toFixed(1)}`);
+                      console.log(`💀 PERDISTE VS CABEZA! Tu: ${currentSnakeRadius.toFixed(1)} vs Bot: ${botRadius.toFixed(1)}`);
                       shouldDie = true;
                     }
                   }
@@ -447,10 +463,37 @@ const GameBoard = () => {
       ctx.restore();
     });
 
+    // ✅ DIBUJAR CURSOR PARA DEBUG
+    if (snake.length > 0) {
+      const head = snake[0];
+      const currentDistanceToMouse = dist(
+        { x: head.x + SIZE / 2, y: head.y + SIZE / 2 },
+        target.current
+      );
+      
+      ctx.save();
+      // Cursor rojo si está muy cerca, verde si está bien
+      ctx.fillStyle = currentDistanceToMouse < SIZE * 2 ? "#ff0000" : "#00ff00";
+      ctx.shadowColor = ctx.fillStyle;
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.arc(target.current.x, target.current.y, 8, 0, 2 * Math.PI);
+      ctx.fill();
+      
+      // Línea hacia la cabeza
+      ctx.strokeStyle = ctx.fillStyle;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.moveTo(head.x + SIZE / 2, head.y + SIZE / 2);
+      ctx.lineTo(target.current.x, target.current.y);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     // ✅ DIBUJAR BOTS SERPIENTES CON INDICADORES VISUALES CLAROS
     bots.forEach((bot) => {
       const botRadius = SIZE / 2 + (bot.segments.length * 0.3);
-      const snakeRadius = SIZE / 2 + (snake.length * 0.3);
       const isDangerous = botRadius > snakeRadius;
 
       bot.segments.forEach((seg: { x: number; y: number }, i: number) => {
@@ -536,10 +579,9 @@ const GameBoard = () => {
       ctx.fillText("Presiona el botón para reiniciar", canvas.width / 2, canvas.height / 2 + 60);
       ctx.restore();
     }
-  }, [snake, foods, bots, gameOver, dimensions]);
+  }, [snake, foods, bots, gameOver, dimensions, snakeRadius]);
 
   // ✅ AÑADIR INDICADOR DE TAMAÑO ACTUAL EN PANTALLA
-  // ✅ AÑADIR INDICADOR DE DEBUG TEMPORAL
   return (
     <div className="fixed inset-0 z-0">
       {/* Badge de score */}
@@ -551,10 +593,10 @@ const GameBoard = () => {
         </span>
       </div>
 
-      {/* ✅ INDICADOR DE TU TAMAÑO ACTUAL */}
+      {/* ✅ INDICADOR DE TU TAMAÑO ACTUAL CON RADIO REACTIVO */}
       <div className="absolute top-20 left-1/2 -translate-x-1/2 z-10">
         <span className="bg-blue-500/80 text-white border border-blue-400 rounded-full px-4 py-1 text-lg font-bold shadow-lg select-none">
-          🐍 Tu tamaño: {snake.length} (Radio: {(SIZE / 2 + (snake.length * 0.3)).toFixed(1)})
+          🐍 Longitud: {snake.length} | Radio: {snakeRadius.toFixed(1)}
         </span>
       </div>
 
@@ -562,6 +604,22 @@ const GameBoard = () => {
       <div className="absolute top-40 left-4 z-10">
         <span className="bg-red-500/80 text-white px-2 py-1 text-sm font-bold rounded select-none">
           🤖 Bots: {bots.length} | 🎮 Game Over: {gameOver ? "SÍ" : "NO"}
+        </span>
+      </div>
+
+      {/* ✅ DEBUG: MOSTRAR DISTANCIA AL CURSOR */}
+      <div className="absolute top-60 left-4 z-10">
+        <span className={`px-2 py-1 text-sm font-bold rounded select-none ${
+          distanceToMouse < SIZE * 2 ? "bg-red-500/80 text-white" : "bg-green-500/80 text-white"
+        }`}>
+          🖱️ Distancia cursor: {distanceToMouse.toFixed(1)}
+        </span>
+      </div>
+
+      {/* ✅ DEBUG: CRECIMIENTO ACTIVO */}
+      <div className="absolute top-80 left-4 z-10">
+        <span className="bg-purple-500/80 text-white px-2 py-1 text-sm font-bold rounded select-none">
+          📈 Crecimiento pendiente: {growRef.current}
         </span>
       </div>
 
