@@ -6,6 +6,7 @@ const SIZE = 14;
 const SPEED = 2.2;
 const FOOD_COUNT = 180;
 const INITIAL_LENGTH = 10;
+const BOT_COUNT = 8;
 
 function randomColor() {
   return `hsl(${Math.floor(Math.random() * 360)}, 90%, 60%)`;
@@ -21,6 +22,29 @@ function randomFood(width: number, height: number) {
   };
 }
 
+// ✅ FUNCIÓN PARA CREAR BOTS SERPIENTES
+function randomBot(width: number, height: number) {
+  const length = 5 + Math.floor(Math.random() * 15); // Entre 5 y 20 segmentos
+  const x = Math.random() * (width - 300) + 150;
+  const y = Math.random() * (height - 300) + 150;
+  const color = randomColor();
+
+  // Crear segmentos de la serpiente bot
+  const segments = Array.from({ length }, (_, i) => ({
+    x: x - i * SIZE,
+    y: y,
+  }));
+
+  return {
+    segments,
+    color,
+    dx: (Math.random() - 0.5) * 2,
+    dy: (Math.random() - 0.5) * 2,
+    angle: Math.random() * Math.PI * 2,
+    length,
+  };
+}
+
 function dist(a: { x: number; y: number }, b: { x: number; y: number }) {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
@@ -32,29 +56,44 @@ function getRecords() {
     return {};
   }
 }
+
 function setRecords(records: Record<string, number>) {
   localStorage.setItem("snake_records", JSON.stringify(records));
 }
 
 const GameBoard = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [snake, setSnake] = useState(
+
+  // ✅ Inicialización segura de la snake
+  const [snake, setSnake] = useState(() =>
     Array.from({ length: INITIAL_LENGTH }, (_, i) => ({
-      x: 400 - i * SIZE,
-      y: 300,
+      x: Math.max(400, window.innerWidth / 2) - i * SIZE,
+      y: Math.max(300, window.innerHeight / 2),
     }))
   );
+
   const [foods, setFoods] = useState<any[]>([]);
+  const [bots, setBots] = useState<any[]>([]);
   const [gameOver, setGameOver] = useState(false);
   const [score, setScore] = useState(0);
-  const [dimensions, setDimensions] = useState({
-    width: window.innerWidth,
-    height: window.innerHeight,
-  });
+
+  // ✅ Dimensiones seguras
+  const [dimensions, setDimensions] = useState(() => ({
+    width: Math.max(800, window.innerWidth),
+    height: Math.max(600, window.innerHeight),
+  }));
+
   const [username, setUsername] = useState<string | null>(null);
   const [highScore, setHighScore] = useState(0);
-  const target = useRef({ x: 400, y: 300 });
+
+  // ✅ Target inicial seguro
+  const target = useRef({
+    x: Math.max(400, window.innerWidth / 2),
+    y: Math.max(300, window.innerHeight / 2)
+  });
+
   const growRef = useRef(0);
+  const angleRef = useRef(0);
 
   // Pedir SIEMPRE el nombre de usuario al entrar con SweetAlert2
   useEffect(() => {
@@ -89,7 +128,10 @@ const GameBoard = () => {
   // Resize canvas
   useEffect(() => {
     const handleResize = () => {
-      setDimensions({ width: window.innerWidth, height: window.innerHeight });
+      setDimensions({
+        width: Math.max(800, window.innerWidth),
+        height: Math.max(600, window.innerHeight)
+      });
     };
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
@@ -106,6 +148,7 @@ const GameBoard = () => {
 
   // Inicializar comida
   useEffect(() => {
+    if (dimensions.width < 100 || dimensions.height < 100) return;
     const arr = [];
     for (let i = 0; i < FOOD_COUNT; i++) {
       arr.push(randomFood(dimensions.width, dimensions.height));
@@ -113,27 +156,78 @@ const GameBoard = () => {
     setFoods(arr);
   }, [dimensions]);
 
-  // Lógica principal del juego
+  // Inicializar bots serpientes
   useEffect(() => {
-    if (gameOver) return;
+    if (dimensions.width < 100 || dimensions.height < 100) return;
+    const arr = [];
+    for (let i = 0; i < BOT_COUNT; i++) {
+      arr.push(randomBot(dimensions.width, dimensions.height));
+    }
+    setBots(arr);
+  }, [dimensions]);
+
+  // ✅ LÓGICA PRINCIPAL CON COLISIONES DEFINITIVAMENTE CORREGIDAS
+  useEffect(() => {
+    if (gameOver || dimensions.width < 100 || dimensions.height < 100) return;
 
     let animationId: number;
     let lastTime = performance.now();
-    let angle = 0;
 
     const step = (now: number) => {
       if (gameOver) return;
       if (now - lastTime > 16) {
+        let totalGrowBy = 0;
+
+        // ✅ MOVER BOTS SERPIENTES (MÁS LENTO)
+        setBots((prevBots) => {
+          return prevBots.map((bot) => {
+            let { segments, color, dx, dy, angle, length } = bot;
+
+            // Cambiar dirección ocasionalmente
+            if (Math.random() < 0.02) {
+              angle += (Math.random() - 0.5) * 0.5;
+            }
+
+            const head = segments[0];
+            const newHead = {
+              x: head.x + Math.cos(angle) * SPEED * 0.4, // ✅ Muy lento para debugging
+              y: head.y + Math.sin(angle) * SPEED * 0.4,
+            };
+
+            // Rebote en bordes
+            if (newHead.x < SIZE || newHead.x > dimensions.width - SIZE) {
+              angle = Math.PI - angle;
+            }
+            if (newHead.y < SIZE || newHead.y > dimensions.height - SIZE) {
+              angle = -angle;
+            }
+
+            // Mover serpiente bot
+            const newSegments = [newHead, ...segments.slice(0, -1)];
+
+            return { ...bot, segments: newSegments, angle };
+          });
+        });
+
+        // ✅ MOVER LA SNAKE DEL JUGADOR CON PROTECCIÓN DE CURSOR
         setSnake((prev) => {
           const head = prev[0];
           const dx = target.current.x - (head.x + SIZE / 2);
           const dy = target.current.y - (head.y + SIZE / 2);
-          const targetAngle = Math.atan2(dy, dx);
-          const diff = ((targetAngle - angle + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
-          angle += diff * 0.12;
 
-          const dirX = Math.cos(angle) * SPEED;
-          const dirY = Math.sin(angle) * SPEED;
+          // ✅ EVITAR MOVIMIENTOS ERRÁTICOS CUANDO EL CURSOR ESTÁ MUY CERCA
+          const distanceToMouse = Math.hypot(dx, dy);
+          if (distanceToMouse < SIZE * 2) {
+            // Si el cursor está muy cerca, mantener la dirección actual
+            return prev;
+          }
+
+          const targetAngle = Math.atan2(dy, dx);
+          const diff = ((targetAngle - angleRef.current + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+          angleRef.current += diff * 0.12;
+
+          const dirX = Math.cos(angleRef.current) * SPEED;
+          const dirY = Math.sin(angleRef.current) * SPEED;
           const newHead = {
             x: head.x + dirX,
             y: head.y + dirY,
@@ -141,53 +235,28 @@ const GameBoard = () => {
 
           // Colisión con paredes
           if (
-            newHead.x < 0 ||
-            newHead.x > dimensions.width - SIZE ||
-            newHead.y < 0 ||
-            newHead.y > dimensions.height - SIZE
+            newHead.x < SIZE ||
+            newHead.x > dimensions.width - SIZE * 2 ||
+            newHead.y < SIZE ||
+            newHead.y > dimensions.height - SIZE * 2
           ) {
             setGameOver(true);
+            growRef.current = 0;
             return prev;
           }
 
-          // Colisión consigo mismo
+          // ✅ COLISIÓN CONSIGO MISMO MEJORADA
           if (
             prev.length > 10 &&
-            prev.slice(5).some((seg) => dist(seg, newHead) < SIZE * 0.8)
+            prev.slice(8).some((seg) => dist(seg, newHead) < SIZE * 0.7) // ✅ Más permisivo
           ) {
+            console.log("💀 COLISIÓN CONSIGO MISMO!");
             setGameOver(true);
+            growRef.current = 0;
             return prev;
           }
 
-          // Comer comida
-          let ate = false;
-          let growBy = 0;
-          setFoods((oldFoods) => {
-            const newFoods = oldFoods.filter((food) => {
-              if (
-                dist(
-                  { x: newHead.x + SIZE / 2, y: newHead.y + SIZE / 2 },
-                  { x: food.x + food.r, y: food.y + food.r }
-                ) <
-                Math.max(food.r, SIZE / 2) * 0.85
-              ) {
-                ate = true;
-                growBy += Math.max(2, Math.round(food.r / 2));
-                return false;
-              }
-              return true;
-            });
-            if (ate) {
-              setScore((s) => s + 1);
-              newFoods.push(randomFood(dimensions.width, dimensions.height));
-            }
-            return newFoods;
-          });
-
-          if (ate) {
-            growRef.current += growBy;
-          }
-
+          // Animar el crecimiento
           if (growRef.current > 0) {
             growRef.current--;
             return [newHead, ...prev];
@@ -195,6 +264,99 @@ const GameBoard = () => {
             return [newHead, ...prev.slice(0, -1)];
           }
         });
+
+        // ✅ VERIFICAR COLISIONES CON LÓGICA COMPLETAMENTE SEPARADA
+        setSnake((currentSnake) => {
+          if (currentSnake.length === 0) return currentSnake;
+          const head = currentSnake[0];
+          const snakeRadius = SIZE / 2 + (currentSnake.length * 0.3);
+
+          // Verificar colisión con comida
+          setFoods((currentFoods) => {
+            const newFoods = currentFoods.filter((food) => {
+              const d = dist(
+                { x: head.x + SIZE / 2, y: head.y + SIZE / 2 },
+                { x: food.x + food.r, y: food.y + food.r }
+              );
+              if (d < (food.r + SIZE / 2) * 1.2) {
+                totalGrowBy += 10;
+                setScore((s) => s + 5);
+                return false;
+              }
+              return true;
+            });
+
+            if (newFoods.length < currentFoods.length) {
+              newFoods.push(randomFood(dimensions.width, dimensions.height));
+            }
+            return newFoods;
+          });
+
+          // ✅ VERIFICAR COLISIÓN CON BOTS - LÓGICA COMPLETAMENTE CORREGIDA
+          setBots((currentBots) => {
+            let shouldDie = false;
+
+            const newBots = currentBots.filter((bot) => {
+              const botRadius = SIZE / 2 + (bot.segments.length * 0.3);
+              let botShouldBeRemoved = false;
+
+              // ✅ VERIFICAR CADA SEGMENTO DEL BOT
+              for (let i = 0; i < bot.segments.length; i++) {
+                const botSegment = bot.segments[i];
+                const distance = dist(
+                  { x: head.x + SIZE / 2, y: head.y + SIZE / 2 },
+                  { x: botSegment.x + SIZE / 2, y: botSegment.y + SIZE / 2 }
+                );
+
+                if (distance < SIZE * 1.2) {
+                  // ✅ SI ES LA CABEZA (i === 0) - COMPARAR TAMAÑOS
+                  if (i === 0) {
+                    if (snakeRadius > botRadius) {
+                      console.log(`🍽️ COMISTE CABEZA! Tu: ${snakeRadius.toFixed(1)} vs Bot: ${botRadius.toFixed(1)}`);
+                      totalGrowBy += bot.segments.length * 2;
+                      setScore((s) => s + bot.segments.length);
+                      botShouldBeRemoved = true;
+                    } else {
+                      console.log(`💀 PERDISTE VS CABEZA! Tu: ${snakeRadius.toFixed(1)} vs Bot: ${botRadius.toFixed(1)}`);
+                      shouldDie = true;
+                    }
+                  }
+                  // ✅ SI ES EL CUERPO (i > 0) - SIEMPRE PUEDES COMERLO
+                  else {
+                    console.log(`🍽️ COMISTE CUERPO! Segmento ${i} de bot con ${bot.segments.length} segmentos`);
+                    totalGrowBy += bot.segments.length;
+                    setScore((s) => s + bot.segments.length);
+                    botShouldBeRemoved = true;
+                  }
+                  break; // ✅ SALIR DEL LOOP AL PRIMERA COLISIÓN
+                }
+              }
+
+              return !botShouldBeRemoved; // Mantener bot solo si NO debe ser removido
+            });
+
+            // ✅ GAME OVER SOLO SI shouldDie ES TRUE
+            if (shouldDie) {
+              setGameOver(true);
+              setScore(0);
+              growRef.current = 0;
+            }
+
+            // Añadir nuevos bots si se comieron algunos
+            while (newBots.length < BOT_COUNT) {
+              newBots.push(randomBot(dimensions.width, dimensions.height));
+            }
+
+            return newBots;
+          });
+
+          if (totalGrowBy > 0) {
+            growRef.current += totalGrowBy;
+          }
+
+          return currentSnake;
+        });
+
         lastTime = now;
       }
       animationId = requestAnimationFrame(step);
@@ -214,28 +376,42 @@ const GameBoard = () => {
       setRecords(records);
     }
     // eslint-disable-next-line
-  }, [gameOver, username]);
+  }, [gameOver, username, score, highScore]);
 
-  // Reinicio manual al perder
+  // ✅ Reinicio manual con posiciones seguras
   const handleRestart = () => {
     setSnake(
       Array.from({ length: INITIAL_LENGTH }, (_, i) => ({
-        x: dimensions.width / 2 - i * SIZE,
-        y: dimensions.height / 2,
+        x: Math.max(200, dimensions.width / 2) - i * SIZE,
+        y: Math.max(200, dimensions.height / 2),
       }))
     );
     setScore(0);
     setGameOver(false);
     growRef.current = 0;
+    angleRef.current = 0;
+
+    // Resetear comidas
     const arr = [];
     for (let i = 0; i < FOOD_COUNT; i++) {
       arr.push(randomFood(dimensions.width, dimensions.height));
     }
     setFoods(arr);
-    target.current = { x: dimensions.width / 2, y: dimensions.height / 2 };
+
+    // Resetear bots serpientes
+    const arrBots = [];
+    for (let i = 0; i < BOT_COUNT; i++) {
+      arrBots.push(randomBot(dimensions.width, dimensions.height));
+    }
+    setBots(arrBots);
+
+    target.current = {
+      x: Math.max(200, dimensions.width / 2),
+      y: Math.max(200, dimensions.height / 2)
+    };
   };
 
-  // Dibujo
+  // ✅ DIBUJO CON INDICADORES VISUALES CLAROS
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -271,7 +447,58 @@ const GameBoard = () => {
       ctx.restore();
     });
 
-    // Serpiente
+    // ✅ DIBUJAR BOTS SERPIENTES CON INDICADORES VISUALES CLAROS
+    bots.forEach((bot) => {
+      const botRadius = SIZE / 2 + (bot.segments.length * 0.3);
+      const snakeRadius = SIZE / 2 + (snake.length * 0.3);
+      const isDangerous = botRadius > snakeRadius;
+
+      bot.segments.forEach((seg: { x: number; y: number }, i: number) => {
+        ctx.save();
+
+        // ✅ COLORES DIFERENTES PARA CABEZA Y CUERPO
+        if (i === 0) {
+          // CABEZA - Color más brillante con indicador de peligro
+          ctx.shadowColor = isDangerous ? "#ff0000" : bot.color;
+          ctx.shadowBlur = 25;
+          ctx.fillStyle = isDangerous ? "#ff4444" : bot.color;
+          ctx.lineWidth = isDangerous ? 3 : 1;
+          ctx.strokeStyle = isDangerous ? "#ff0000" : bot.color;
+        } else {
+          // CUERPO - Más transparente y menos brillante
+          ctx.shadowColor = bot.color;
+          ctx.shadowBlur = 8;
+          ctx.fillStyle = `${bot.color}44`; // Muy transparente
+        }
+
+        ctx.beginPath();
+        ctx.arc(seg.x + SIZE / 2, seg.y + SIZE / 2, SIZE / 2, 0, 2 * Math.PI);
+        ctx.fill();
+
+        if (i === 0 && isDangerous) {
+          ctx.stroke(); // Borde rojo para cabezas peligrosas
+        }
+
+        // ✅ NÚMERO EN LA CABEZA
+        if (i === 0) {
+          ctx.fillStyle = "#000";
+          ctx.font = "bold 8px Arial";
+          ctx.textAlign = "center";
+          ctx.fillText(bot.segments.length.toString(), seg.x + SIZE / 2, seg.y + SIZE / 2 + 2);
+
+          // Ojos
+          ctx.fillStyle = "#fff";
+          ctx.beginPath();
+          ctx.arc(seg.x + SIZE / 2 - 2, seg.y + SIZE / 2 - 1, 1, 0, 2 * Math.PI);
+          ctx.arc(seg.x + SIZE / 2 + 2, seg.y + SIZE / 2 - 1, 1, 0, 2 * Math.PI);
+          ctx.fill();
+        }
+
+        ctx.restore();
+      });
+    });
+
+    // ✅ SERPIENTE DEL JUGADOR CON TAMAÑO VISIBLE
     snake.forEach((seg, i) => {
       ctx.save();
       ctx.shadowColor = "#06b6d4";
@@ -280,6 +507,15 @@ const GameBoard = () => {
       ctx.beginPath();
       ctx.arc(seg.x + SIZE / 2, seg.y + SIZE / 2, SIZE / 2, 0, 2 * Math.PI);
       ctx.fill();
+
+      // ✅ TU TAMAÑO EN LA CABEZA
+      if (i === 0) {
+        ctx.fillStyle = "#000";
+        ctx.font = "bold 10px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText(snake.length.toString(), seg.x + SIZE / 2, seg.y + SIZE / 2 + 3);
+      }
+
       ctx.restore();
     });
 
@@ -300,8 +536,10 @@ const GameBoard = () => {
       ctx.fillText("Presiona el botón para reiniciar", canvas.width / 2, canvas.height / 2 + 60);
       ctx.restore();
     }
-  }, [snake, foods, gameOver, dimensions]);
+  }, [snake, foods, bots, gameOver, dimensions]);
 
+  // ✅ AÑADIR INDICADOR DE TAMAÑO ACTUAL EN PANTALLA
+  // ✅ AÑADIR INDICADOR DE DEBUG TEMPORAL
   return (
     <div className="fixed inset-0 z-0">
       {/* Badge de score */}
@@ -312,6 +550,21 @@ const GameBoard = () => {
           <span className="ml-4">🏆 Récord: {highScore}</span>
         </span>
       </div>
+
+      {/* ✅ INDICADOR DE TU TAMAÑO ACTUAL */}
+      <div className="absolute top-20 left-1/2 -translate-x-1/2 z-10">
+        <span className="bg-blue-500/80 text-white border border-blue-400 rounded-full px-4 py-1 text-lg font-bold shadow-lg select-none">
+          🐍 Tu tamaño: {snake.length} (Radio: {(SIZE / 2 + (snake.length * 0.3)).toFixed(1)})
+        </span>
+      </div>
+
+      {/* ✅ DEBUG: MOSTRAR ESTADO DEL JUEGO */}
+      <div className="absolute top-40 left-4 z-10">
+        <span className="bg-red-500/80 text-white px-2 py-1 text-sm font-bold rounded select-none">
+          🤖 Bots: {bots.length} | 🎮 Game Over: {gameOver ? "SÍ" : "NO"}
+        </span>
+      </div>
+
       <canvas
         ref={canvasRef}
         width={dimensions.width}
