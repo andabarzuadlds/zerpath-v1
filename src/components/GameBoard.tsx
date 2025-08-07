@@ -104,6 +104,7 @@ const GameBoard = () => {
   const [pendingGrowth, setPendingGrowth] = useState(0);
   const [leaderboard, setLeaderboard] = useState<Array<{ username: string, score: number }>>([]);
   const [topFive, setTopFive] = useState<Array<{ username: string, score: number }>>([]);
+  const [connectedPlayers, setConnectedPlayers] = useState<string[]>([]); // <-- 1. NUEVO ESTADO
   const [isMobileDevice, setIsMobileDevice] = useState(false);
   const [touchControls, setTouchControls] = useState({ x: 0, y: 0, active: false });
   const [showMobileUI, setShowMobileUI] = useState(true);
@@ -117,10 +118,15 @@ const GameBoard = () => {
 
   const snakeRadius = useMemo(() => SIZE / 2 + (snake.length * 0.3), [snake.length]);
 
-  // --- CONEXIÓN A ABLY (USANDO TU API_URL) ---
+  // --- CONEXIÓN A ABLY (CORREGIDA Y CON PRESENCIA) ---
   useEffect(() => {
+    // 2. No hacer nada hasta que tengamos un nombre de usuario.
+    if (!username) return;
+
     const ablyClient = new Ably.Realtime({
-      authUrl: `${API_URL}/ably-auth`
+      // 3. Pasamos el nombre de usuario como clientId a nuestro backend.
+      authUrl: `${API_URL}/ably-auth`,
+      authParams: { clientId: username }
     });
 
     ablyClient.connection.on('connected', () => {
@@ -129,15 +135,29 @@ const GameBoard = () => {
 
     const channel = ablyClient.channels.get('game-room');
 
-    channel.subscribe('some-event', (message) => {
-      console.log('Mensaje recibido:', message.data);
+    // 4. Lógica de Presencia
+    channel.presence.subscribe('enter', (member) => {
+      setConnectedPlayers(prev => [...prev, member.clientId].sort());
     });
 
+    channel.presence.subscribe('leave', (member) => {
+      setConnectedPlayers(prev => prev.filter(id => id !== member.clientId));
+    });
+
+    // Obtenemos la lista inicial de miembros y entramos en el set de presencia
+    (async () => {
+      const initialMembers = await channel.presence.get();
+      setConnectedPlayers(initialMembers.map(member => member.clientId).sort());
+      await channel.presence.enter();
+    })();
+
+
     return () => {
+      // Salimos del set de presencia al desmontar
+      channel.presence.leave();
       ablyClient.close();
     };
-  }, []);
-
+  }, [username]); // <-- El efecto ahora depende del nombre de usuario
 
   useEffect(() => { setIsMobileDevice(isMobile()); }, []);
 
@@ -554,6 +574,21 @@ const GameBoard = () => {
       )}
       {!isMobileDevice && (
         <>
+          {/* 5. NUEVO COMPONENTE: LISTA DE JUGADORES CONECTADOS */}
+          <div className="absolute top-4 left-4 z-20 min-w-[220px] bg-black/90 border-2 border-green-400 rounded-lg p-3 shadow-2xl backdrop-blur-sm">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-green-400 text-sm">🟢</span>
+              <h3 className="text-green-300 font-bold text-sm">EN LÍNEA ({connectedPlayers.length})</h3>
+            </div>
+            <div className="space-y-1 max-h-60 overflow-y-auto pr-2">
+              {connectedPlayers.map((player, index) => (
+                <div key={index} className={`flex justify-between items-center py-1 px-1 rounded text-xs ${player === username ? 'bg-yellow-600/20 text-yellow-300 font-bold border border-yellow-400/30' : 'text-white'}`}>
+                  <span className="truncate max-w-[180px]" title={player}>{player}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-2">
             <div className="bg-black/80 backdrop-blur-sm text-pink-300 border border-pink-400 rounded-full px-6 py-3 text-xl font-bold shadow-lg select-none">
               {username && <span className="mr-3">👨‍🚀 {username}</span>} ⭐ {score} <span className="ml-3">🏆 {highScore}</span>

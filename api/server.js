@@ -38,11 +38,13 @@ const ably = new Ably.Rest({ key: ABLY_API_KEY });
 // Reescribimos la ruta para usar async/await, que es más robusto y moderno.
 app.get('/api/ably-auth', async (req, res) => {
   console.log('🔑 Solicitando token de Ably (versión async)...');
-  const tokenParams = { clientId: `client-${Math.random().toString(36).substr(2, 9)}` };
+  
+  // CORRECCIÓN: Usar el clientId que nos pasa el cliente desde el frontend.
+  // Si no viene, generamos uno de invitado como fallback.
+  const clientId = req.query.clientId || `guest-${Math.random().toString(36).substr(2, 9)}`;
+  const tokenParams = { clientId: clientId };
 
   try {
-    // Usamos la versión de la función que devuelve una Promesa.
-    // Pasamos las opciones de autenticación directamente aquí también.
     const tokenRequest = await ably.auth.createTokenRequest(tokenParams, { key: ABLY_API_KEY });
     
     console.log('✅ Token de Ably generado exitosamente (async).');
