@@ -8,6 +8,19 @@ const FOOD_COUNT = 180;
 const INITIAL_LENGTH = 10;
 const BOT_COUNT = 8;
 
+// ✅ URL DE LA API (SIN CREDENCIALES EXPUESTAS)
+// Add this type declaration at the top of your file or in a global .d.ts file
+declare global {
+  interface ImportMeta {
+    env: {
+      VITE_API_URL?: string;
+      [key: string]: any;
+    };
+  }
+}
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+
 function randomColor() {
   return `hsl(${Math.floor(Math.random() * 360)}, 90%, 60%)`;
 }
@@ -47,7 +60,49 @@ function dist(a: { x: number; y: number }, b: { x: number; y: number }) {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-function getRecords() {
+// ✅ FUNCIONES PARA LA API (SIN CREDENCIALES EXPUESTAS)
+async function getPlayerRecord(username: string): Promise<number> {
+  try {
+    const response = await fetch(`${API_URL}/player/${encodeURIComponent(username)}/record`);
+    if (!response.ok) throw new Error('Network error');
+    const data = await response.json();
+    return data.score || 0;
+  } catch (error) {
+    console.error('Error getting player record:', error);
+    return 0;
+  }
+}
+
+async function setPlayerRecord(username: string, score: number): Promise<void> {
+  try {
+    const response = await fetch(`${API_URL}/player/${encodeURIComponent(username)}/record`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ score }),
+    });
+    if (!response.ok) throw new Error('Network error');
+  } catch (error) {
+    console.error('Error setting player record:', error);
+    throw error;
+  }
+}
+
+async function getTopPlayers(limit: number = 10): Promise<Array<{username: string, score: number}>> {
+  try {
+    const response = await fetch(`${API_URL}/leaderboard/${limit}`);
+    if (!response.ok) throw new Error('Network error');
+    const players = await response.json();
+    return players;
+  } catch (error) {
+    console.error('Error getting leaderboard:', error);
+    return [];
+  }
+}
+
+// ✅ FALLBACK LOCAL STORAGE
+function getLocalRecords() {
   try {
     return JSON.parse(localStorage.getItem("snake_records") || "{}");
   } catch {
@@ -55,7 +110,7 @@ function getRecords() {
   }
 }
 
-function setRecords(records: Record<string, number>) {
+function setLocalRecords(records: Record<string, number>) {
   localStorage.setItem("snake_records", JSON.stringify(records));
 }
 
@@ -83,11 +138,15 @@ const GameBoard = () => {
   const [highScore, setHighScore] = useState(0);
   const [pendingGrowth, setPendingGrowth] = useState(0);
 
-  // ✅ SISTEMA MEJORADO PARA QUEDARSE QUIETO
+  // ✅ ESTADOS PARA LEADERBOARD
+  const [leaderboard, setLeaderboard] = useState<Array<{username: string, score: number}>>([]);
+  const [topFive, setTopFive] = useState<Array<{username: string, score: number}>>([]);
+
+  // Sistema para quedarse quieto
   const [isMouseMoving, setIsMouseMoving] = useState(false);
   const [lastMousePosition, setLastMousePosition] = useState({ x: 0, y: 0 });
   const lastMoveTimeRef = useRef(0);
-  const isNearTargetRef = useRef(false); // ✅ NUEVO: Detectar si está cerca del target
+  const isNearTargetRef = useRef(false);
 
   const target = useRef({
     x: Math.max(400, window.innerWidth / 2),
@@ -100,33 +159,74 @@ const GameBoard = () => {
     return SIZE / 2 + (snake.length * 0.3);
   }, [snake.length]);
 
-  // Pedir nombre de usuario
+  // ✅ FUNCIÓN PARA ACTUALIZAR TOP 5
+  const updateTopFive = async () => {
+    try {
+      const topPlayers = await getTopPlayers(5);
+      setTopFive(topPlayers);
+    } catch (error) {
+      console.error('Error updating top 5:', error);
+      // Fallback a localStorage
+      const localRecords = getLocalRecords();
+      const localTop5 = Object.entries(localRecords)
+        .sort(([,a], [,b]) => (b as number) - (a as number))
+        .slice(0, 5)
+        .map(([username, score]) => ({ username, score: score as number }));
+      setTopFive(localTop5);
+    }
+  };
+
+  // ✅ PEDIR NOMBRE DE USUARIO Y CARGAR DATOS
   useEffect(() => {
     async function askUsername() {
       const { value: user } = await Swal.fire({
-        title: "¡Bienvenido!",
+        title: "🐍 ¡Bienvenido a Snake Arena!",
         text: "Ingresa tu nombre de usuario:",
         input: "text",
         inputPlaceholder: "Tu nombre",
-        confirmButtonText: "Jugar",
+        confirmButtonText: "🎮 Jugar",
         allowOutsideClick: false,
         allowEscapeKey: false,
         inputValidator: (value) => {
           if (!value) return "Por favor ingresa un nombre";
+          if (value.length > 20) return "Máximo 20 caracteres";
         },
         customClass: {
-          popup: "bg-black/90 text-pink-300",
-          confirmButton: "bg-pink-500 text-white px-6 py-2 rounded font-bold",
+          popup: "bg-black/90 text-pink-300 border border-pink-400",
+          confirmButton: "bg-pink-500 text-white px-6 py-2 rounded font-bold hover:bg-pink-600",
         },
       });
-      const username = user || "Invitado";
-      localStorage.setItem("snake_username", username);
-      setUsername(username);
 
-      const records = getRecords();
-      setHighScore(records[username] || 0);
+      const username = user || "Invitado";
+      setUsername(username);
+      
+      // ✅ CARGAR PUNTAJE DESDE API (CON FALLBACK A LOCAL STORAGE)
+      try {
+        const apiScore = await getPlayerRecord(username);
+        setHighScore(apiScore);
+      } catch (error) {
+        // Fallback a localStorage si API falla
+        const localRecords = getLocalRecords();
+        setHighScore(localRecords[username] || 0);
+      }
+
+      // ✅ CARGAR LEADERBOARD Y TOP 5
+      try {
+        const topPlayers = await getTopPlayers(10);
+        setLeaderboard(topPlayers);
+        setTopFive(topPlayers.slice(0, 5));
+      } catch (error) {
+        console.error('Error loading leaderboard:', error);
+        await updateTopFive();
+      }
     }
     askUsername();
+  }, []);
+
+  // ✅ ACTUALIZAR TOP 5 CADA 10 SEGUNDOS
+  useEffect(() => {
+    const interval = setInterval(updateTopFive, 10000);
+    return () => clearInterval(interval);
   }, []);
 
   // Resize canvas
@@ -141,23 +241,22 @@ const GameBoard = () => {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // ✅ MOUSE MOVEMENT MEJORADO PARA QUEDARSE QUIETO
+  // Mouse movement
   useEffect(() => {
     const handleMouse = (e: MouseEvent) => {
       const now = performance.now();
       const newPosition = { x: e.clientX, y: e.clientY };
       
-      // ✅ UMBRAL MÁS ALTO PARA EVITAR MICRO-MOVIMIENTOS
       const moved = Math.hypot(
         newPosition.x - lastMousePosition.x,
         newPosition.y - lastMousePosition.y
-      ) > 15; // ✅ AUMENTADO A 15 PÍXELES
+      ) > 15;
       
       if (moved) {
         target.current = newPosition;
         setLastMousePosition(newPosition);
         lastMoveTimeRef.current = now;
-        isNearTargetRef.current = false; // ✅ RESET cuando se mueve
+        isNearTargetRef.current = false;
         
         if (!isMouseMoving) {
           setIsMouseMoving(true);
@@ -175,17 +274,16 @@ const GameBoard = () => {
     return () => window.removeEventListener("mousemove", handleMouse);
   }, [lastMousePosition, isMouseMoving]);
 
-  // ✅ VERIFICAR SI EL MOUSE SIGUE MOVIÉNDOSE (MÁS TIEMPO)
+  // Verificar movimiento del mouse
   useEffect(() => {
     if (gameOver) return;
     
     const checkMouseMovement = setInterval(() => {
       const now = performance.now();
-      // ✅ AUMENTADO A 300ms PARA MÁS ESTABILIDAD
       if (now - lastMoveTimeRef.current > 300 && isMouseMoving) {
         setIsMouseMoving(false);
       }
-    }, 100); // ✅ VERIFICAR CADA 100ms
+    }, 100);
 
     return () => clearInterval(checkMouseMovement);
   }, [gameOver, isMouseMoving]);
@@ -210,7 +308,7 @@ const GameBoard = () => {
     setBots(arr);
   }, [dimensions]);
 
-  // ✅ LÓGICA PRINCIPAL CON PARADA COMPLETA
+  // Lógica principal del juego
   useEffect(() => {
     if (gameOver || dimensions.width < 100 || dimensions.height < 100) return;
 
@@ -221,7 +319,7 @@ const GameBoard = () => {
       if (gameOver) return;
       if (now - lastTime > 16) {
 
-        // Mover bots (igual que antes)
+        // Mover bots
         setBots((prevBots) => {
           return prevBots.map((bot) => {
             let { segments, color, dx, dy, angle, length } = bot;
@@ -248,32 +346,25 @@ const GameBoard = () => {
           });
         });
 
-        // ✅ MOVER LA SNAKE CON PARADA COMPLETA
+        // Mover la snake
         setSnake((prev) => {
           const head = prev[0];
           
-          // ✅ CALCULAR DISTANCIA AL TARGET
           const distanceToTarget = Math.hypot(
             target.current.x - (head.x + SIZE / 2),
             target.current.y - (head.y + SIZE / 2)
           );
           
-          // ✅ SI ESTÁ CERCA DEL TARGET (30px), MARCAR COMO "CERCA"
           if (distanceToTarget < 30) {
             isNearTargetRef.current = true;
           }
           
-          // ✅ SOLO MOVERSE SI:
-          // 1. El mouse se está moviendo, O
-          // 2. Está lejos del target (más de 30px)
           const shouldMove = isMouseMoving || (!isNearTargetRef.current && distanceToTarget > 30);
           
           if (!shouldMove) {
-            // ✅ QUEDARSE COMPLETAMENTE QUIETO
             return prev;
           }
           
-          // ✅ SOLO CAMBIAR DIRECCIÓN SI EL MOUSE SE ESTÁ MOVIENDO
           if (isMouseMoving) {
             const dx = target.current.x - (head.x + SIZE / 2);
             const dy = target.current.y - (head.y + SIZE / 2);
@@ -321,7 +412,7 @@ const GameBoard = () => {
           }
         });
 
-        // Verificar colisiones (igual que antes)
+        // Verificar colisiones
         setSnake((currentSnake) => {
           if (currentSnake.length === 0) return currentSnake;
           const head = currentSnake[0];
@@ -384,7 +475,6 @@ const GameBoard = () => {
 
             if (shouldDie) {
               setGameOver(true);
-              setScore(0);
               setPendingGrowth(0);
             }
 
@@ -407,18 +497,88 @@ const GameBoard = () => {
     return () => cancelAnimationFrame(animationId);
   }, [gameOver, dimensions, pendingGrowth, isMouseMoving]);
 
-  // Guardar récord
+  // ✅ GUARDAR RÉCORD AL PERDER
   useEffect(() => {
     if (!gameOver || !username) return;
-    if (score > highScore) {
-      setHighScore(score);
-      const records = getRecords();
-      records[username] = score;
-      setRecords(records);
+    
+    async function saveScore() {
+      if (score > highScore) {
+        setHighScore(score);
+        
+        try {
+          await setPlayerRecord(username ?? "Invitado", score);
+          
+          // ✅ ACTUALIZAR LEADERBOARD Y TOP 5
+          const updatedLeaderboard = await getTopPlayers(10);
+          setLeaderboard(updatedLeaderboard);
+          setTopFive(updatedLeaderboard.slice(0, 5));
+          
+        } catch (error) {
+          console.error('Error saving to API:', error);
+          // ✅ FALLBACK A LOCAL STORAGE
+          const localRecords = getLocalRecords();
+          localRecords[username ?? "Invitado"] = score;
+          setLocalRecords(localRecords);
+          await updateTopFive();
+        }
+      }
     }
+    
+    saveScore();
   }, [gameOver, username, score, highScore]);
 
-  // ✅ Reinicio con reset de estados
+  // ✅ FUNCIÓN PARA MOSTRAR LEADERBOARD
+  const showLeaderboardModal = async () => {
+    try {
+      const topPlayers = await getTopPlayers(10);
+      const leaderboardHTML = topPlayers.length > 0 ? 
+        topPlayers
+          .map((player, index) => 
+            `<div class="flex justify-between items-center mb-2 p-2 ${player.username === username ? 'bg-yellow-600 text-black font-bold rounded' : 'text-white'}">
+              <span>${index + 1}. ${player.username}</span>
+              <span>${player.score} pts</span>
+            </div>`
+          )
+          .join('') :
+        '<div class="text-center text-white">No hay puntajes registrados aún</div>';
+
+      await Swal.fire({
+        title: "🏆 Tabla de Líderes",
+        html: `<div class="text-left max-h-96 overflow-y-auto">${leaderboardHTML}</div>`,
+        confirmButtonText: "Cerrar",
+        customClass: {
+          popup: "bg-black/90 text-pink-300 border border-pink-400",
+          confirmButton: "bg-pink-500 text-white px-6 py-2 rounded font-bold hover:bg-pink-600",
+        },
+      });
+    } catch (error) {
+      console.error('Error showing leaderboard:', error);
+      
+      // Mostrar leaderboard local como fallback
+      const localRecords = getLocalRecords();
+      const localHTML = Object.entries(localRecords)
+        .sort(([,a], [,b]) => (b as number) - (a as number))
+        .slice(0, 10)
+        .map(([name, score], index) => 
+          `<div class="flex justify-between items-center mb-2 p-2 ${name === username ? 'bg-yellow-600 text-black font-bold rounded' : 'text-white'}">
+            <span>${index + 1}. ${name}</span>
+            <span>${score} pts</span>
+          </div>`
+        ).join('') || '<div class="text-center text-white">No hay puntajes locales</div>';
+
+      await Swal.fire({
+        title: "🏆 Ranking Local",
+        html: `<div class="text-left max-h-96 overflow-y-auto">${localHTML}</div>`,
+        confirmButtonText: "Cerrar",
+        customClass: {
+          popup: "bg-black/90 text-pink-300 border border-pink-400",
+          confirmButton: "bg-pink-500 text-white px-6 py-2 rounded font-bold hover:bg-pink-600",
+        },
+      });
+    }
+  };
+
+  // Reinicio del juego
   const handleRestart = () => {
     setSnake(
       Array.from({ length: INITIAL_LENGTH }, (_, i) => ({
@@ -431,7 +591,7 @@ const GameBoard = () => {
     setPendingGrowth(0);
     angleRef.current = 0;
     setIsMouseMoving(false);
-    isNearTargetRef.current = false; // ✅ RESET
+    isNearTargetRef.current = false;
     lastMoveTimeRef.current = performance.now();
 
     const arr = [];
@@ -452,7 +612,7 @@ const GameBoard = () => {
     };
   };
 
-  // Dibujo (igual que antes)
+  // Dibujo del canvas
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -568,12 +728,69 @@ const GameBoard = () => {
 
   return (
     <div className="fixed inset-0 z-0">
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
+      {/* Header con información */}
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-2">
         <span className="bg-black/80 text-pink-300 border border-pink-400 rounded-full px-6 py-2 text-xl font-bold shadow-lg select-none">
           {username && <span className="mr-4">👤 {username}</span>}
-          🍬 Comidas: {score}
+          🍬 Puntos: {score}
           <span className="ml-4">🏆 Récord: {highScore}</span>
         </span>
+        
+        <button
+          onClick={showLeaderboardModal}
+          className="bg-gradient-to-r from-purple-500 to-purple-400 text-white text-sm font-bold py-2 px-4 rounded-full shadow-lg border-2 border-purple-300 hover:scale-105 active:scale-95 transition-all duration-300"
+        >
+          🏆 Ver Ranking
+        </button>
+      </div>
+
+      {/* ✅ BARRA LATERAL FLOTANTE - TOP 5 RÉCORDS */}
+      <div className="absolute top-4 right-4 z-20 bg-black/90 border-2 border-pink-400 rounded-lg p-4 min-w-[200px] shadow-2xl backdrop-blur-sm">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-yellow-400 text-lg">🏆</span>
+          <h3 className="text-pink-300 font-bold text-sm">TOP 5 RÉCORDS</h3>
+        </div>
+        
+        <div className="space-y-1">
+          {topFive.length > 0 ? (
+            topFive.map((player, index) => (
+              <div 
+                key={`${player.username}-${index}`}
+                className={`flex justify-between items-center py-1 px-2 rounded text-xs ${
+                  player.username === username 
+                    ? 'bg-yellow-600/20 text-yellow-300 font-bold border border-yellow-400/30' 
+                    : 'text-white hover:bg-pink-500/10'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className={`
+                    ${index === 0 ? 'text-yellow-400' : ''}
+                    ${index === 1 ? 'text-gray-300' : ''}
+                    ${index === 2 ? 'text-orange-400' : ''}
+                    ${index >= 3 ? 'text-pink-300' : ''}
+                    font-bold
+                  `}>
+                    {index + 1}.
+                  </span>
+                  <span className="truncate max-w-[80px]" title={player.username}>
+                    {player.username}
+                  </span>
+                </div>
+                <span className="font-mono text-cyan-300">{player.score}</span>
+              </div>
+            ))
+          ) : (
+            <div className="text-center text-gray-400 text-xs py-2">
+              No hay récords aún
+            </div>
+          )}
+        </div>
+        
+        <div className="mt-2 pt-2 border-t border-pink-400/30">
+          <div className="text-xs text-gray-400 text-center">
+            Actualizado automáticamente
+          </div>
+        </div>
       </div>
 
       <canvas
@@ -583,13 +800,22 @@ const GameBoard = () => {
         className="block w-full h-full"
         style={{ display: "block", width: "100vw", height: "100vh" }}
       />
+
+      {/* Botones de game over */}
       {gameOver && (
-        <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-30 pointer-events-auto">
+        <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-30 pointer-events-auto flex gap-4">
           <button
             onClick={handleRestart}
             className="bg-gradient-to-r from-pink-500 to-pink-400 text-white text-2xl font-bold py-4 px-10 rounded-full shadow-2xl border-4 border-cyan-400 hover:scale-105 active:scale-95 transition-all duration-300"
           >
             🔄 Jugar de nuevo
+          </button>
+          
+          <button
+            onClick={showLeaderboardModal}
+            className="bg-gradient-to-r from-purple-500 to-purple-400 text-white text-2xl font-bold py-4 px-10 rounded-full shadow-2xl border-4 border-purple-300 hover:scale-105 active:scale-95 transition-all duration-300"
+          >
+            🏆 Ver Ranking
           </button>
         </div>
       )}
