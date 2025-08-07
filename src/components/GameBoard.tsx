@@ -19,7 +19,22 @@ declare global {
   }
 }
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+// ✅ DETECCIÓN AUTOMÁTICA DE ENTORNO
+const getApiUrl = () => {
+  if (typeof window === 'undefined') return 'http://localhost:3001/api';
+
+  // En desarrollo
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    return 'http://localhost:3001/api';
+  }
+
+  // En producción (Vercel)
+  return `${window.location.origin}/api`;
+};
+
+const API_URL = getApiUrl();
+
+console.log('🌐 API URL:', API_URL); // Para debug
 
 function randomColor() {
   return `hsl(${Math.floor(Math.random() * 360)}, 90%, 60%)`;
@@ -89,7 +104,7 @@ async function setPlayerRecord(username: string, score: number): Promise<void> {
   }
 }
 
-async function getTopPlayers(limit: number = 10): Promise<Array<{username: string, score: number}>> {
+async function getTopPlayers(limit: number = 10): Promise<Array<{ username: string, score: number }>> {
   try {
     const response = await fetch(`${API_URL}/leaderboard/${limit}`);
     if (!response.ok) throw new Error('Network error');
@@ -139,8 +154,8 @@ const GameBoard = () => {
   const [pendingGrowth, setPendingGrowth] = useState(0);
 
   // ✅ ESTADOS PARA LEADERBOARD
-  const [leaderboard, setLeaderboard] = useState<Array<{username: string, score: number}>>([]);
-  const [topFive, setTopFive] = useState<Array<{username: string, score: number}>>([]);
+  const [leaderboard, setLeaderboard] = useState<Array<{ username: string, score: number }>>([]);
+  const [topFive, setTopFive] = useState<Array<{ username: string, score: number }>>([]);
 
   // Sistema para quedarse quieto
   const [isMouseMoving, setIsMouseMoving] = useState(false);
@@ -169,7 +184,7 @@ const GameBoard = () => {
       // Fallback a localStorage
       const localRecords = getLocalRecords();
       const localTop5 = Object.entries(localRecords)
-        .sort(([,a], [,b]) => (b as number) - (a as number))
+        .sort(([, a], [, b]) => (b as number) - (a as number))
         .slice(0, 5)
         .map(([username, score]) => ({ username, score: score as number }));
       setTopFive(localTop5);
@@ -199,7 +214,7 @@ const GameBoard = () => {
 
       const username = user || "Invitado";
       setUsername(username);
-      
+
       // ✅ CARGAR PUNTAJE DESDE API (CON FALLBACK A LOCAL STORAGE)
       try {
         const apiScore = await getPlayerRecord(username);
@@ -246,18 +261,18 @@ const GameBoard = () => {
     const handleMouse = (e: MouseEvent) => {
       const now = performance.now();
       const newPosition = { x: e.clientX, y: e.clientY };
-      
+
       const moved = Math.hypot(
         newPosition.x - lastMousePosition.x,
         newPosition.y - lastMousePosition.y
       ) > 15;
-      
+
       if (moved) {
         target.current = newPosition;
         setLastMousePosition(newPosition);
         lastMoveTimeRef.current = now;
         isNearTargetRef.current = false;
-        
+
         if (!isMouseMoving) {
           setIsMouseMoving(true);
         }
@@ -277,7 +292,7 @@ const GameBoard = () => {
   // Verificar movimiento del mouse
   useEffect(() => {
     if (gameOver) return;
-    
+
     const checkMouseMovement = setInterval(() => {
       const now = performance.now();
       if (now - lastMoveTimeRef.current > 300 && isMouseMoving) {
@@ -349,26 +364,26 @@ const GameBoard = () => {
         // Mover la snake
         setSnake((prev) => {
           const head = prev[0];
-          
+
           const distanceToTarget = Math.hypot(
             target.current.x - (head.x + SIZE / 2),
             target.current.y - (head.y + SIZE / 2)
           );
-          
+
           if (distanceToTarget < 30) {
             isNearTargetRef.current = true;
           }
-          
+
           const shouldMove = isMouseMoving || (!isNearTargetRef.current && distanceToTarget > 30);
-          
+
           if (!shouldMove) {
             return prev;
           }
-          
+
           if (isMouseMoving) {
             const dx = target.current.x - (head.x + SIZE / 2);
             const dy = target.current.y - (head.y + SIZE / 2);
-            
+
             const targetAngle = Math.atan2(dy, dx);
             const diff = ((targetAngle - angleRef.current + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
             angleRef.current += diff * 0.12;
@@ -500,19 +515,19 @@ const GameBoard = () => {
   // ✅ GUARDAR RÉCORD AL PERDER
   useEffect(() => {
     if (!gameOver || !username) return;
-    
+
     async function saveScore() {
       if (score > highScore) {
         setHighScore(score);
-        
+
         try {
           await setPlayerRecord(username ?? "Invitado", score);
-          
+
           // ✅ ACTUALIZAR LEADERBOARD Y TOP 5
           const updatedLeaderboard = await getTopPlayers(10);
           setLeaderboard(updatedLeaderboard);
           setTopFive(updatedLeaderboard.slice(0, 5));
-          
+
         } catch (error) {
           console.error('Error saving to API:', error);
           // ✅ FALLBACK A LOCAL STORAGE
@@ -523,7 +538,7 @@ const GameBoard = () => {
         }
       }
     }
-    
+
     saveScore();
   }, [gameOver, username, score, highScore]);
 
@@ -531,9 +546,9 @@ const GameBoard = () => {
   const showLeaderboardModal = async () => {
     try {
       const topPlayers = await getTopPlayers(10);
-      const leaderboardHTML = topPlayers.length > 0 ? 
+      const leaderboardHTML = topPlayers.length > 0 ?
         topPlayers
-          .map((player, index) => 
+          .map((player, index) =>
             `<div class="flex justify-between items-center mb-2 p-2 ${player.username === username ? 'bg-yellow-600 text-black font-bold rounded' : 'text-white'}">
               <span>${index + 1}. ${player.username}</span>
               <span>${player.score} pts</span>
@@ -553,13 +568,13 @@ const GameBoard = () => {
       });
     } catch (error) {
       console.error('Error showing leaderboard:', error);
-      
+
       // Mostrar leaderboard local como fallback
       const localRecords = getLocalRecords();
       const localHTML = Object.entries(localRecords)
-        .sort(([,a], [,b]) => (b as number) - (a as number))
+        .sort(([, a], [, b]) => (b as number) - (a as number))
         .slice(0, 10)
-        .map(([name, score], index) => 
+        .map(([name, score], index) =>
           `<div class="flex justify-between items-center mb-2 p-2 ${name === username ? 'bg-yellow-600 text-black font-bold rounded' : 'text-white'}">
             <span>${index + 1}. ${name}</span>
             <span>${score} pts</span>
@@ -735,7 +750,7 @@ const GameBoard = () => {
           🍬 Puntos: {score}
           <span className="ml-4">🏆 Récord: {highScore}</span>
         </span>
-        
+
         <button
           onClick={showLeaderboardModal}
           className="bg-gradient-to-r from-purple-500 to-purple-400 text-white text-sm font-bold py-2 px-4 rounded-full shadow-lg border-2 border-purple-300 hover:scale-105 active:scale-95 transition-all duration-300"
@@ -750,17 +765,16 @@ const GameBoard = () => {
           <span className="text-yellow-400 text-lg">🏆</span>
           <h3 className="text-pink-300 font-bold text-sm">TOP 5 RÉCORDS</h3>
         </div>
-        
+
         <div className="space-y-1">
           {topFive.length > 0 ? (
             topFive.map((player, index) => (
-              <div 
+              <div
                 key={`${player.username}-${index}`}
-                className={`flex justify-between items-center py-1 px-2 rounded text-xs ${
-                  player.username === username 
-                    ? 'bg-yellow-600/20 text-yellow-300 font-bold border border-yellow-400/30' 
-                    : 'text-white hover:bg-pink-500/10'
-                }`}
+                className={`flex justify-between items-center py-1 px-2 rounded text-xs ${player.username === username
+                  ? 'bg-yellow-600/20 text-yellow-300 font-bold border border-yellow-400/30'
+                  : 'text-white hover:bg-pink-500/10'
+                  }`}
               >
                 <div className="flex items-center gap-2">
                   <span className={`
@@ -785,7 +799,7 @@ const GameBoard = () => {
             </div>
           )}
         </div>
-        
+
         <div className="mt-2 pt-2 border-t border-pink-400/30">
           <div className="text-xs text-gray-400 text-center">
             Actualizado automáticamente
@@ -810,7 +824,7 @@ const GameBoard = () => {
           >
             🔄 Jugar de nuevo
           </button>
-          
+
           <button
             onClick={showLeaderboardModal}
             className="bg-gradient-to-r from-purple-500 to-purple-400 text-white text-2xl font-bold py-4 px-10 rounded-full shadow-2xl border-4 border-purple-300 hover:scale-105 active:scale-95 transition-all duration-300"
