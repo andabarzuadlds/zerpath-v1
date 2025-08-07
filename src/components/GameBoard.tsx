@@ -86,29 +86,21 @@ const GameBoard = () => {
   const [username, setUsername] = useState<string | null>(null);
   const [highScore, setHighScore] = useState(0);
 
+  // ✅ Estado reactivo para crecimiento
+  const [pendingGrowth, setPendingGrowth] = useState(0);
+
   // ✅ Target inicial seguro
   const target = useRef({
     x: Math.max(400, window.innerWidth / 2),
     y: Math.max(300, window.innerHeight / 2)
   });
 
-  const growRef = useRef(0);
   const angleRef = useRef(0);
 
-  // ✅ CALCULAR RADIO REACTIVO CON USEMEMO (SOLUCIÓN AL BUG DE PRODUCCIÓN)
+  // ✅ CALCULAR RADIO REACTIVO CON USEMEMO
   const snakeRadius = useMemo(() => {
     return SIZE / 2 + (snake.length * 0.3);
   }, [snake.length]);
-
-  // ✅ CALCULAR DISTANCIA AL CURSOR
-  const distanceToMouse = useMemo(() => {
-    if (snake.length === 0) return 0;
-    const head = snake[0];
-    return dist(
-      { x: head.x + SIZE / 2, y: head.y + SIZE / 2 },
-      target.current
-    );
-  }, [snake, target.current]);
 
   // Pedir SIEMPRE el nombre de usuario al entrar con SweetAlert2
   useEffect(() => {
@@ -181,7 +173,7 @@ const GameBoard = () => {
     setBots(arr);
   }, [dimensions]);
 
-  // ✅ LÓGICA PRINCIPAL CON COLISIONES DEFINITIVAMENTE CORREGIDAS
+  // ✅ LÓGICA PRINCIPAL CON ESTADO REACTIVO PARA CRECIMIENTO
   useEffect(() => {
     if (gameOver || dimensions.width < 100 || dimensions.height < 100) return;
 
@@ -191,9 +183,8 @@ const GameBoard = () => {
     const step = (now: number) => {
       if (gameOver) return;
       if (now - lastTime > 16) {
-        let totalGrowBy = 0;
 
-        // ✅ MOVER BOTS SERPIENTES (MÁS LENTO)
+        // ✅ MOVER BOTS SERPIENTES
         setBots((prevBots) => {
           return prevBots.map((bot) => {
             let { segments, color, dx, dy, angle, length } = bot;
@@ -205,7 +196,7 @@ const GameBoard = () => {
 
             const head = segments[0];
             const newHead = {
-              x: head.x + Math.cos(angle) * SPEED * 0.4, // ✅ Muy lento para debugging
+              x: head.x + Math.cos(angle) * SPEED * 0.4,
               y: head.y + Math.sin(angle) * SPEED * 0.4,
             };
 
@@ -224,18 +215,11 @@ const GameBoard = () => {
           });
         });
 
-        // ✅ MOVER LA SNAKE DEL JUGADOR CON PROTECCIÓN DE CURSOR
+        // ✅ MOVER LA SNAKE DEL JUGADOR
         setSnake((prev) => {
           const head = prev[0];
           const dx = target.current.x - (head.x + SIZE / 2);
           const dy = target.current.y - (head.y + SIZE / 2);
-
-          // ✅ EVITAR MOVIMIENTOS ERRÁTICOS CUANDO EL CURSOR ESTÁ MUY CERCA
-          const distanceToMouse = Math.hypot(dx, dy);
-          if (distanceToMouse < SIZE * 2) {
-            // Si el cursor está muy cerca, mantener la dirección actual
-            return prev;
-          }
 
           const targetAngle = Math.atan2(dy, dx);
           const diff = ((targetAngle - angleRef.current + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
@@ -256,31 +240,30 @@ const GameBoard = () => {
             newHead.y > dimensions.height - SIZE * 2
           ) {
             setGameOver(true);
-            growRef.current = 0;
+            setPendingGrowth(0);
             return prev;
           }
 
-          // ✅ COLISIÓN CONSIGO MISMO MEJORADA
+          // ✅ COLISIÓN CONSIGO MISMO
           if (
             prev.length > 10 &&
-            prev.slice(8).some((seg) => dist(seg, newHead) < SIZE * 0.7) // ✅ Más permisivo
+            prev.slice(8).some((seg) => dist(seg, newHead) < SIZE * 0.7)
           ) {
-            console.log("💀 COLISIÓN CONSIGO MISMO!");
             setGameOver(true);
-            growRef.current = 0;
+            setPendingGrowth(0);
             return prev;
           }
 
-          // Animar el crecimiento
-          if (growRef.current > 0) {
-            growRef.current--;
-            return [newHead, ...prev];
+          // ✅ APLICAR CRECIMIENTO USANDO ESTADO REACTIVO
+          if (pendingGrowth > 0) {
+            setPendingGrowth(prev => prev - 1);
+            return [newHead, ...prev]; // Crecer
           } else {
-            return [newHead, ...prev.slice(0, -1)];
+            return [newHead, ...prev.slice(0, -1)]; // Normal
           }
         });
 
-        // ✅ VERIFICAR COLISIONES CON LÓGICA COMPLETAMENTE SEPARADA
+        // ✅ VERIFICAR COLISIONES
         setSnake((currentSnake) => {
           if (currentSnake.length === 0) return currentSnake;
           const head = currentSnake[0];
@@ -294,9 +277,8 @@ const GameBoard = () => {
                 { x: food.x + food.r, y: food.y + food.r }
               );
               if (d < (food.r + SIZE / 2) * 1.2) {
-                totalGrowBy += 10;
+                setPendingGrowth(prev => prev + 3); // ✅ 3 segmentos por comida
                 setScore((s) => s + 5);
-                console.log(`🍬 COMIDA! Crecimiento: +10, Total pendiente: ${totalGrowBy}`);
                 return false;
               }
               return true;
@@ -308,7 +290,7 @@ const GameBoard = () => {
             return newFoods;
           });
 
-          // ✅ VERIFICAR COLISIÓN CON BOTS - LÓGICA COMPLETAMENTE CORREGIDA
+          // ✅ VERIFICAR COLISIÓN CON BOTS
           setBots((currentBots) => {
             let shouldDie = false;
 
@@ -328,34 +310,31 @@ const GameBoard = () => {
                   // ✅ SI ES LA CABEZA (i === 0) - COMPARAR TAMAÑOS
                   if (i === 0) {
                     if (currentSnakeRadius > botRadius) {
-                      console.log(`🍽️ COMISTE CABEZA! Tu: ${currentSnakeRadius.toFixed(1)} vs Bot: ${botRadius.toFixed(1)}`);
-                      totalGrowBy += bot.segments.length * 2;
+                      setPendingGrowth(prev => prev + bot.segments.length);
                       setScore((s) => s + bot.segments.length);
                       botShouldBeRemoved = true;
                     } else {
-                      console.log(`💀 PERDISTE VS CABEZA! Tu: ${currentSnakeRadius.toFixed(1)} vs Bot: ${botRadius.toFixed(1)}`);
                       shouldDie = true;
                     }
                   }
                   // ✅ SI ES EL CUERPO (i > 0) - SIEMPRE PUEDES COMERLO
                   else {
-                    console.log(`🍽️ COMISTE CUERPO! Segmento ${i} de bot con ${bot.segments.length} segmentos`);
-                    totalGrowBy += bot.segments.length;
+                    setPendingGrowth(prev => prev + bot.segments.length);
                     setScore((s) => s + bot.segments.length);
                     botShouldBeRemoved = true;
                   }
-                  break; // ✅ SALIR DEL LOOP AL PRIMERA COLISIÓN
+                  break;
                 }
               }
 
-              return !botShouldBeRemoved; // Mantener bot solo si NO debe ser removido
+              return !botShouldBeRemoved;
             });
 
             // ✅ GAME OVER SOLO SI shouldDie ES TRUE
             if (shouldDie) {
               setGameOver(true);
               setScore(0);
-              growRef.current = 0;
+              setPendingGrowth(0);
             }
 
             // Añadir nuevos bots si se comieron algunos
@@ -365,10 +344,6 @@ const GameBoard = () => {
 
             return newBots;
           });
-
-          if (totalGrowBy > 0) {
-            growRef.current += totalGrowBy;
-          }
 
           return currentSnake;
         });
@@ -380,7 +355,7 @@ const GameBoard = () => {
 
     animationId = requestAnimationFrame(step);
     return () => cancelAnimationFrame(animationId);
-  }, [gameOver, dimensions]);
+  }, [gameOver, dimensions, pendingGrowth]);
 
   // Guardar récord al perder si es mayor
   useEffect(() => {
@@ -404,7 +379,7 @@ const GameBoard = () => {
     );
     setScore(0);
     setGameOver(false);
-    growRef.current = 0;
+    setPendingGrowth(0);
     angleRef.current = 0;
 
     // Resetear comidas
@@ -427,7 +402,7 @@ const GameBoard = () => {
     };
   };
 
-  // ✅ DIBUJO CON INDICADORES VISUALES CLAROS
+  // ✅ DIBUJO LIMPIO SIN DEBUG
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -463,35 +438,7 @@ const GameBoard = () => {
       ctx.restore();
     });
 
-    // ✅ DIBUJAR CURSOR PARA DEBUG
-    if (snake.length > 0) {
-      const head = snake[0];
-      const currentDistanceToMouse = dist(
-        { x: head.x + SIZE / 2, y: head.y + SIZE / 2 },
-        target.current
-      );
-      
-      ctx.save();
-      // Cursor rojo si está muy cerca, verde si está bien
-      ctx.fillStyle = currentDistanceToMouse < SIZE * 2 ? "#ff0000" : "#00ff00";
-      ctx.shadowColor = ctx.fillStyle;
-      ctx.shadowBlur = 10;
-      ctx.beginPath();
-      ctx.arc(target.current.x, target.current.y, 8, 0, 2 * Math.PI);
-      ctx.fill();
-      
-      // Línea hacia la cabeza
-      ctx.strokeStyle = ctx.fillStyle;
-      ctx.lineWidth = 2;
-      ctx.setLineDash([5, 5]);
-      ctx.beginPath();
-      ctx.moveTo(head.x + SIZE / 2, head.y + SIZE / 2);
-      ctx.lineTo(target.current.x, target.current.y);
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    // ✅ DIBUJAR BOTS SERPIENTES CON INDICADORES VISUALES CLAROS
+    // ✅ DIBUJAR BOTS SERPIENTES
     bots.forEach((bot) => {
       const botRadius = SIZE / 2 + (bot.segments.length * 0.3);
       const isDangerous = botRadius > snakeRadius;
@@ -541,7 +488,7 @@ const GameBoard = () => {
       });
     });
 
-    // ✅ SERPIENTE DEL JUGADOR CON TAMAÑO VISIBLE
+    // ✅ SERPIENTE DEL JUGADOR
     snake.forEach((seg, i) => {
       ctx.save();
       ctx.shadowColor = "#06b6d4";
@@ -581,7 +528,7 @@ const GameBoard = () => {
     }
   }, [snake, foods, bots, gameOver, dimensions, snakeRadius]);
 
-  // ✅ AÑADIR INDICADOR DE TAMAÑO ACTUAL EN PANTALLA
+  // ✅ INTERFAZ LIMPIA
   return (
     <div className="fixed inset-0 z-0">
       {/* Badge de score */}
@@ -590,36 +537,6 @@ const GameBoard = () => {
           {username && <span className="mr-4">👤 {username}</span>}
           🍬 Comidas: {score}
           <span className="ml-4">🏆 Récord: {highScore}</span>
-        </span>
-      </div>
-
-      {/* ✅ INDICADOR DE TU TAMAÑO ACTUAL CON RADIO REACTIVO */}
-      <div className="absolute top-20 left-1/2 -translate-x-1/2 z-10">
-        <span className="bg-blue-500/80 text-white border border-blue-400 rounded-full px-4 py-1 text-lg font-bold shadow-lg select-none">
-          🐍 Longitud: {snake.length} | Radio: {snakeRadius.toFixed(1)}
-        </span>
-      </div>
-
-      {/* ✅ DEBUG: MOSTRAR ESTADO DEL JUEGO */}
-      <div className="absolute top-40 left-4 z-10">
-        <span className="bg-red-500/80 text-white px-2 py-1 text-sm font-bold rounded select-none">
-          🤖 Bots: {bots.length} | 🎮 Game Over: {gameOver ? "SÍ" : "NO"}
-        </span>
-      </div>
-
-      {/* ✅ DEBUG: MOSTRAR DISTANCIA AL CURSOR */}
-      <div className="absolute top-60 left-4 z-10">
-        <span className={`px-2 py-1 text-sm font-bold rounded select-none ${
-          distanceToMouse < SIZE * 2 ? "bg-red-500/80 text-white" : "bg-green-500/80 text-white"
-        }`}>
-          🖱️ Distancia cursor: {distanceToMouse.toFixed(1)}
-        </span>
-      </div>
-
-      {/* ✅ DEBUG: CRECIMIENTO ACTIVO */}
-      <div className="absolute top-80 left-4 z-10">
-        <span className="bg-purple-500/80 text-white px-2 py-1 text-sm font-bold rounded select-none">
-          📈 Crecimiento pendiente: {growRef.current}
         </span>
       </div>
 
