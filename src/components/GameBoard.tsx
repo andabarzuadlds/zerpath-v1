@@ -45,7 +45,7 @@ function randomBot(
   const baseLength = 8 + Math.floor(Math.random() * 20);
   const scaledLength = Math.floor(baseLength * environment.botSizeMultiplier);
 
-  let x, y;
+  let x: number, y: number; // <-- CORRECCIÓN: Añadir los tipos explícitos aquí.
   if (playerPosition && dimensions) {
     // Aparecer en un radio máximo del 80% de la pantalla alrededor del jugador
     const maxSpawnDistance = Math.min(dimensions.width, dimensions.height) * 0.8;
