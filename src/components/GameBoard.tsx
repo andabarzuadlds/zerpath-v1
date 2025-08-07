@@ -105,8 +105,19 @@ const GameBoard = () => {
   const [leaderboard, setLeaderboard] = useState<Array<{ username: string, score: number }>>([]);
   const [topFive, setTopFive] = useState<Array<{ username: string, score: number }>>([]);
   const [connectedPlayers, setConnectedPlayers] = useState<string[]>([]);
-  // 1. NUEVO ESTADO para guardar los datos de los otros jugadores
   const [otherPlayers, setOtherPlayers] = useState<Map<string, any>>(new Map());
+
+  // --- AÑADIR ESTAS LÍNEAS PARA CORREGIR LOS ERRORES ---
+  const target = useRef({ x: WORLD_SIZE / 2, y: WORLD_SIZE / 2 });
+  const angleRef = useRef(0);
+  const [isMoving, setIsMoving] = useState(false);
+  const [lastInputPosition, setLastInputPosition] = useState({ x: 0, y: 0 });
+  const lastMoveTimeRef = useRef(performance.now());
+  const isNearTargetRef = useRef(false);
+  const [touchControls, setTouchControls] = useState({ x: 0, y: 0, active: false });
+  const [showMobileUI, setShowMobileUI] = useState(true);
+  const botGrowthTimerRef = useRef(performance.now());
+  // --- FIN DEL BLOQUE A AÑADIR ---
 
   const isMobileDevice = isMobile();
   const snakeRadius = useMemo(() => SIZE / 2 + (snake.length * 0.3), [snake.length]);
@@ -148,7 +159,9 @@ const GameBoard = () => {
 
       setOtherPlayers(prev => {
         const newMap = new Map(prev);
-        newMap.set(message.clientId, message.data);
+        if (typeof message.clientId === 'string') {
+          newMap.set(message.clientId, message.data);
+        }
         return newMap;
       });
     });
@@ -186,7 +199,7 @@ const GameBoard = () => {
     };
   }, [username, snake]); // <-- Ahora depende de 'snake' para publicar la posición actualizada
 
-  useEffect(() => { setIsMobileDevice(isMobile()); }, []);
+  // Removed erroneous useEffect for setIsMobileDevice
 
   useEffect(() => {
     const generateStars = () => setStars(Array.from({ length: 300 }, () => ({ x: Math.random() * WORLD_SIZE, y: Math.random() * WORLD_SIZE, size: Math.random() * 3 + 1, opacity: Math.random() * 0.8 + 0.2 })));
