@@ -35,10 +35,15 @@ function randomFood(worldSize: number, environment: any) {
   return food;
 }
 
-function randomBot(worldSize: number, environment: any, playerPosition?: { x: number, y: number }, dimensions?: { width: number, height: number }) {
+function randomBot(
+  worldSize: number,
+  environment: any,
+  playerPosition?: { x: number; y: number },
+  dimensions?: { width: number; height: number }
+) {
   const baseLength = 8 + Math.floor(Math.random() * 20);
   const scaledLength = Math.floor(baseLength * environment.botSizeMultiplier);
-  
+
   let x, y;
   if (playerPosition && dimensions) {
     // Aparecer en un radio máximo del 80% de la pantalla alrededor del jugador
@@ -64,9 +69,9 @@ function randomBot(worldSize: number, environment: any, playerPosition?: { x: nu
   else if (environment.id === 'neptune') color = environment.threatLevel >= 4 ? '#0088ff' : '#00bfff';
   else if (environment.id === 'alien') color = environment.threatLevel >= 5 ? '#00ff44' : '#00ff7f';
   else if (environment.id === 'blackhole') color = environment.threatLevel >= 6 ? '#bb00ff' : '#9400d3';
-  
+
   const angle = Math.random() * Math.PI * 2;
-  const segments = Array.from({ length: scaledLength }, (_, i) => ({ 
+  const segments = Array.from({ length: scaledLength }, (_, i) => ({
     x: x - i * (SIZE * 0.7) * Math.cos(angle),
     y: y - i * (SIZE * 0.7) * Math.sin(angle)
   }));
@@ -125,17 +130,17 @@ const GameBoard = () => {
     const newEnvironment = [...ENVIRONMENTS].reverse().find(env => score >= env.threshold) || ENVIRONMENTS[0];
     if (newEnvironment.id !== currentEnvironment.id) {
       setCurrentEnvironment(newEnvironment);
-      const playerLength = snake.length; 
-      
+      const playerLength = snake.length;
+
       setBots(prevBots => {
         let updatedBots = prevBots.map(bot => {
           if (!bot.segments || bot.segments.length === 0) {
-            return bot; 
+            return bot;
           }
           const targetLength = Math.floor(playerLength * newEnvironment.botSizeMultiplier);
           const head = bot.segments[0];
           const angle = bot.angle;
-          const newSegments = Array.from({ length: targetLength }, (_, i) => ({ 
+          const newSegments = Array.from({ length: targetLength }, (_, i) => ({
             x: head.x - i * (SIZE * 0.7) * Math.cos(angle),
             y: head.y - i * (SIZE * 0.7) * Math.sin(angle)
           }));
@@ -159,7 +164,7 @@ const GameBoard = () => {
       if (score > 0) {
         const threatEmoji = '⚠️'.repeat(newEnvironment.threatLevel);
         const toast = document.createElement('div');
-        
+
         // Estilos para la notificación tipo Toast en la esquina superior izquierda
         toast.style.position = 'fixed';
         toast.style.top = '20px';
@@ -182,7 +187,7 @@ const GameBoard = () => {
           <div style="font-size: 16px; color: #c4b5fd;">${newEnvironment.name}</div>
           <div style="font-size: 12px; color: #a78bfa; margin-top: 4px;">Amenaza: ${newEnvironment.threatLevel}/6</div>
         `;
-        
+
         document.body.appendChild(toast);
 
         // Animar la entrada
@@ -262,19 +267,19 @@ const GameBoard = () => {
   useEffect(() => { if (gameOver) return; const checkMovement = setInterval(() => { const now = performance.now(); if (now - lastMoveTimeRef.current > 300 && isMoving) { setIsMoving(false); } }, 100); return () => clearInterval(checkMovement); }, [gameOver, isMoving]);
 
   useEffect(() => { const arr = []; for (let i = 0; i < FOOD_COUNT; i++) { arr.push(randomFood(WORLD_SIZE, currentEnvironment)); } setFoods(arr); }, [currentEnvironment]);
-  
+
   // Corregido: Este useEffect ahora se ejecuta solo una vez al montar el componente.
-  useEffect(() => { 
+  useEffect(() => {
     const initialPlayerPosition = { x: WORLD_SIZE / 2, y: WORLD_SIZE / 2 };
     const initialDimensions = { width: Math.max(800, window.innerWidth), height: Math.max(600, window.innerHeight) };
-    const arr = []; 
+    const arr = [];
     const initialBotCount = ENVIRONMENTS[0].botCount;
-    for (let i = 0; i < initialBotCount; i++) { 
+    for (let i = 0; i < initialBotCount; i++) {
       // Solo los primeros 3 bots aparecen cerca del jugador.
       const spawnNear = i < 3;
-      arr.push(randomBot(WORLD_SIZE, ENVIRONMENTS[0], spawnNear ? initialPlayerPosition : undefined, spawnNear ? initialDimensions : undefined)); 
-    } 
-    setBots(arr); 
+      arr.push(randomBot(WORLD_SIZE, ENVIRONMENTS[0], spawnNear ? initialPlayerPosition : undefined, spawnNear ? initialDimensions : undefined));
+    }
+    setBots(arr);
   }, []);
 
   useEffect(() => {
@@ -284,16 +289,16 @@ const GameBoard = () => {
       if (gameOver) return;
       if (now - lastTime > 16) {
         if (now - botGrowthTimerRef.current > 5000) { setBots(prevBots => prevBots.map(bot => { if (Math.random() < bot.growthRate) { const lastSegment = bot.segments[bot.segments.length - 1]; return { ...bot, segments: [...bot.segments, { ...lastSegment }], length: bot.length + 1 }; } return bot; })); botGrowthTimerRef.current = now; }
-        
+
         const playerHead = snake[0];
-        setBots((prevBots) => { 
-          return prevBots.map((bot) => { 
-            let { segments, angle, speedMultiplier, threatLevel } = bot; 
+        setBots((prevBots) => {
+          return prevBots.map((bot) => {
+            let { segments, angle, speedMultiplier, threatLevel } = bot;
             const botHead = segments[0];
             const distanceToPlayer = dist(botHead, playerHead);
-            
+
             // IA de Persecución: Radio de detección y agresividad basados en threatLevel
-            const detectionRadius = 250 + threatLevel * 150; 
+            const detectionRadius = 250 + threatLevel * 150;
 
             if (distanceToPlayer < detectionRadius) {
               // Perseguir al jugador
@@ -303,18 +308,18 @@ const GameBoard = () => {
               angle += diff * turnSpeed;
             } else {
               // Deambular si el jugador está lejos
-              if (Math.random() < 0.02) { 
-                angle += (Math.random() - 0.5) * 0.5; 
+              if (Math.random() < 0.02) {
+                angle += (Math.random() - 0.5) * 0.5;
               }
             }
 
             // La velocidad del bot ahora se ve afectada por el multiplicador del ambiente.
             const currentBotSpeed = SPEED * 0.4 * speedMultiplier;
-            const newHead = { x: botHead.x + Math.cos(angle) * currentBotSpeed, y: botHead.y + Math.sin(angle) * currentBotSpeed, }; 
-            if (newHead.x < 0) newHead.x = WORLD_SIZE; if (newHead.x > WORLD_SIZE) newHead.x = 0; if (newHead.y < 0) newHead.y = WORLD_SIZE; if (newHead.y > WORLD_SIZE) newHead.y = 0; 
-            const newSegments = [newHead, ...segments.slice(0, -1)]; 
-            return { ...bot, segments: newSegments, angle }; 
-          }); 
+            const newHead = { x: botHead.x + Math.cos(angle) * currentBotSpeed, y: botHead.y + Math.sin(angle) * currentBotSpeed, };
+            if (newHead.x < 0) newHead.x = WORLD_SIZE; if (newHead.x > WORLD_SIZE) newHead.x = 0; if (newHead.y < 0) newHead.y = WORLD_SIZE; if (newHead.y > WORLD_SIZE) newHead.y = 0;
+            const newSegments = [newHead, ...segments.slice(0, -1)];
+            return { ...bot, segments: newSegments, angle };
+          });
         });
 
         setSnake((prev) => {
@@ -345,18 +350,19 @@ const GameBoard = () => {
         setSnake((currentSnake) => {
           if (currentSnake.length === 0) return currentSnake; const head = currentSnake[0]; const currentSnakeRadius = SIZE / 2 + (currentSnake.length * 0.3);
           setFoods((currentFoods) => { const newFoods = currentFoods.filter((food) => { const d = dist({ x: head.x + SIZE / 2, y: head.y + SIZE / 2 }, { x: food.x + food.r, y: food.y + food.r }); if (d < (food.r + SIZE / 2) * 1.2) { const growthAmount = food.type === 'special' ? 5 : 3; const scoreAmount = food.type === 'special' ? 10 : 5; setPendingGrowth(prev => prev + growthAmount); setScore((s) => s + scoreAmount); return false; } return true; }); while (newFoods.length < FOOD_COUNT) { newFoods.push(randomFood(WORLD_SIZE, currentEnvironment)); } return newFoods; });
-          setBots((currentBots) => { let shouldDie = false; const newBots = currentBots.filter((bot) => { const botRadius = SIZE / 2 + (bot.segments.length * 0.3); let botShouldBeRemoved = false; for (let i = 0; i < bot.segments.length; i++) { const botSegment = bot.segments[i]; const distance = dist({ x: head.x + SIZE / 2, y: head.y + SIZE / 2 }, { x: botSegment.x + SIZE / 2, y: botSegment.y + SIZE / 2 }); if (distance < SIZE * 1.2) { if (i === 0) { if (currentSnakeRadius > botRadius) { setPendingGrowth(prev => prev + bot.segments.length); setScore((s) => s + bot.segments.length); botShouldBeRemoved = true; } else { shouldDie = true; } } else { setPendingGrowth(prev => prev + bot.segments.length); setScore((s) => s + bot.segments.length); botShouldBeRemoved = true; } break; } } return !botShouldBeRemoved; }); if (shouldDie) { setGameOver(true); setPendingGrowth(0); } 
+          setBots((currentBots) => {
+            let shouldDie = false; const newBots = currentBots.filter((bot) => { const botRadius = SIZE / 2 + (bot.segments.length * 0.3); let botShouldBeRemoved = false; for (let i = 0; i < bot.segments.length; i++) { const botSegment = bot.segments[i]; const distance = dist({ x: head.x + SIZE / 2, y: head.y + SIZE / 2 }, { x: botSegment.x + SIZE / 2, y: botSegment.y + SIZE / 2 }); if (distance < SIZE * 1.2) { if (i === 0) { if (currentSnakeRadius > botRadius) { setPendingGrowth(prev => prev + bot.segments.length); setScore((s) => s + bot.segments.length); botShouldBeRemoved = true; } else { shouldDie = true; } } else { setPendingGrowth(prev => prev + bot.segments.length); setScore((s) => s + bot.segments.length); botShouldBeRemoved = true; } break; } } return !botShouldBeRemoved; }); if (shouldDie) { setGameOver(true); setPendingGrowth(0); }
             while (newBots.length < currentEnvironment.botCount) {
               // Contamos cuántos bots están actualmente cerca del jugador.
               const nearbyBotsCount = newBots.filter(b => {
-                  const detectionRadius = 250 + b.threatLevel * 150; // Usamos el radio de detección como "cercanía"
-                  return dist(b.segments[0], head) < detectionRadius;
+                const detectionRadius = 250 + b.threatLevel * 150; // Usamos el radio de detección como "cercanía"
+                return dist(b.segments[0], head) < detectionRadius;
               }).length;
               // Si hay menos de 3 bots cerca, el nuevo bot aparecerá cerca. De lo contrario, aleatorio.
               const shouldSpawnNear = nearbyBotsCount < 3;
               newBots.push(randomBot(WORLD_SIZE, currentEnvironment, shouldSpawnNear ? head : undefined, shouldSpawnNear ? dimensions : undefined));
-            } 
-            return newBots; 
+            }
+            return newBots;
           });
           return currentSnake;
         });
@@ -370,17 +376,17 @@ const GameBoard = () => {
 
   useEffect(() => {
     if (!gameOver || !username) return;
-    async function saveScore() { 
-      if (score > highScore) { 
-        setHighScore(score); 
-        try { 
-          await setPlayerRecord(username ?? "Invitado", score); 
-        } catch (error) { 
-          console.error('Error saving to API:', error); 
-          const localRecords = getLocalRecords(); 
-          localRecords[username ?? "Invitado"] = score; 
-          setLocalRecords(localRecords); 
-        } 
+    async function saveScore() {
+      if (score > highScore) {
+        setHighScore(score);
+        try {
+          await setPlayerRecord(username ?? "Invitado", score);
+        } catch (error) {
+          console.error('Error saving to API:', error);
+          const localRecords = getLocalRecords();
+          localRecords[username ?? "Invitado"] = score;
+          setLocalRecords(localRecords);
+        }
       }
       // Siempre actualiza el top 5 al final de la partida.
       await updateTopFive();
@@ -400,14 +406,14 @@ const GameBoard = () => {
     setSnake(Array.from({ length: INITIAL_LENGTH }, (_, i) => ({ x: WORLD_SIZE / 2 - i * SIZE, y: WORLD_SIZE / 2 })));
     setScore(0); setGameOver(false); setPendingGrowth(0); angleRef.current = 0; setIsMoving(false); setTouchControls({ x: 0, y: 0, active: false }); isNearTargetRef.current = false; lastMoveTimeRef.current = performance.now(); botGrowthTimerRef.current = performance.now(); setShowMobileUI(true); setCurrentEnvironment(ENVIRONMENTS[0]);
     const arr = []; for (let i = 0; i < FOOD_COUNT; i++) { arr.push(randomFood(WORLD_SIZE, ENVIRONMENTS[0])); } setFoods(arr);
-    const arrBots = []; 
-    const playerPosition = { x: WORLD_SIZE / 2, y: WORLD_SIZE / 2 }; 
+    const arrBots = [];
+    const playerPosition = { x: WORLD_SIZE / 2, y: WORLD_SIZE / 2 };
     const initialBotCount = ENVIRONMENTS[0].botCount;
-    for (let i = 0; i < initialBotCount; i++) { 
-        // Solo los primeros 3 bots aparecen cerca del jugador.
-        const spawnNear = i < 3;
-        arrBots.push(randomBot(WORLD_SIZE, ENVIRONMENTS[0], spawnNear ? playerPosition : undefined, spawnNear ? dimensions : undefined)); 
-    } 
+    for (let i = 0; i < initialBotCount; i++) {
+      // Solo los primeros 3 bots aparecen cerca del jugador.
+      const spawnNear = i < 3;
+      arrBots.push(randomBot(WORLD_SIZE, ENVIRONMENTS[0], spawnNear ? playerPosition : undefined, spawnNear ? dimensions : undefined));
+    }
     setBots(arrBots);
     target.current = { x: WORLD_SIZE / 2, y: WORLD_SIZE / 2 };
     setCamera({ x: WORLD_SIZE / 2 - dimensions.width / 2, y: WORLD_SIZE / 2 - dimensions.height / 2 });
@@ -421,36 +427,44 @@ const GameBoard = () => {
     nebulaClouds.forEach((cloud) => { const screenX = cloud.x - camera.x; const screenY = cloud.y - camera.y; if (screenX > -cloud.size && screenX < canvas.width + cloud.size && screenY > -cloud.size && screenY < canvas.height + cloud.size) { ctx.save(); ctx.globalAlpha = cloud.opacity; const nebulaGradient = ctx.createRadialGradient(screenX, screenY, 0, screenX, screenY, cloud.size); nebulaGradient.addColorStop(0, cloud.color + '80'); nebulaGradient.addColorStop(0.5, cloud.color + '40'); nebulaGradient.addColorStop(1, 'transparent'); ctx.fillStyle = nebulaGradient; ctx.fillRect(screenX - cloud.size, screenY - cloud.size, cloud.size * 2, cloud.size * 2); ctx.restore(); } });
     stars.forEach((star) => { const screenX = star.x - camera.x; const screenY = star.y - camera.y; if (screenX > -10 && screenX < canvas.width + 10 && screenY > -10 && screenY < canvas.height + 10) { ctx.save(); ctx.globalAlpha = star.opacity; ctx.fillStyle = currentEnvironment.starColor; ctx.shadowColor = currentEnvironment.starColor; ctx.shadowBlur = star.size * 2; ctx.beginPath(); ctx.arc(screenX, screenY, star.size, 0, 2 * Math.PI); ctx.fill(); ctx.restore(); } });
     foods.forEach((food) => { const screenX = food.x - camera.x; const screenY = food.y - camera.y; if (screenX > -food.r * 2 && screenX < canvas.width + food.r * 2 && screenY > -food.r * 2 && screenY < canvas.height + food.r * 2) { ctx.save(); if (food.type === 'special') { const pulse = Math.sin(performance.now() * 0.005) * 0.3 + 1; ctx.shadowColor = food.color; ctx.shadowBlur = 25 * pulse; ctx.scale(pulse, pulse); ctx.strokeStyle = food.color; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc((screenX + food.r) / pulse, (screenY + food.r) / pulse, (food.r + 5) / pulse, 0, 2 * Math.PI); ctx.stroke(); } else { ctx.shadowColor = food.color; ctx.shadowBlur = 16; } ctx.fillStyle = food.color; ctx.beginPath(); ctx.arc((screenX + food.r) / (food.type === 'special' ? Math.sin(performance.now() * 0.005) * 0.3 + 1 : 1), (screenY + food.r) / (food.type === 'special' ? Math.sin(performance.now() * 0.005) * 0.3 + 1 : 1), food.r / (food.type === 'special' ? Math.sin(performance.now() * 0.005) * 0.3 + 1 : 1), 0, 2 * Math.PI); ctx.fill(); ctx.restore(); } });
-    
+
     // --- OPTIMIZACIÓN DE BOTS ---
-    bots.forEach((bot) => { const botRadius = SIZE / 2 + (bot.segments.length * 0.3); const isDangerous = botRadius > snakeRadius; const isVeryDangerous = bot.threatLevel >= 4; bot.segments.forEach((seg: { x: number; y: number }, i: number) => { const screenX = seg.x - camera.x; const screenY = seg.y - camera.y; if (screenX > -SIZE * 2 && screenX < canvas.width + SIZE * 2 && screenY > -SIZE * 2 && screenY < canvas.height + SIZE * 2) { ctx.save(); 
-      if (i === 0) { 
-        // Sombra SÓLO en la cabeza
-        if (isVeryDangerous) { const pulse = Math.sin(performance.now() * 0.01) * 0.2 + 1; ctx.shadowColor = "#ff0000"; ctx.shadowBlur = 35 * pulse; ctx.scale(pulse, pulse); } else if (isDangerous) { ctx.shadowColor = "#ff4444"; ctx.shadowBlur = 25; } else { ctx.shadowColor = bot.color; ctx.shadowBlur = 15; } 
-        ctx.fillStyle = isDangerous ? (isVeryDangerous ? "#ff0000" : "#ff4444") : bot.color; 
-        ctx.lineWidth = isDangerous ? (isVeryDangerous ? 4 : 3) : 1; 
-        ctx.strokeStyle = isDangerous ? "#ff0000" : bot.color; 
-      } else { 
-        // SIN SOMBRA para el cuerpo
-        ctx.shadowBlur = 0; 
-        ctx.fillStyle = `${bot.color}99`; // Un poco más de opacidad para que se vea bien
-      } 
-      const adjustedSize = SIZE / (isVeryDangerous && i === 0 ? Math.sin(performance.now() * 0.01) * 0.2 + 1 : 1); const adjustedX = screenX / (isVeryDangerous && i === 0 ? Math.sin(performance.now() * 0.01) * 0.2 + 1 : 1); const adjustedY = screenY / (isVeryDangerous && i === 0 ? Math.sin(performance.now() * 0.01) * 0.2 + 1 : 1); ctx.beginPath(); ctx.arc(adjustedX + adjustedSize / 2, adjustedY + adjustedSize / 2, adjustedSize / 2, 0, 2 * Math.PI); ctx.fill(); if (i === 0 && isDangerous) { ctx.stroke(); } if (i === 0) { ctx.fillStyle = "#000"; ctx.font = "bold 8px Arial"; ctx.textAlign = "center"; ctx.fillText(bot.segments.length.toString(), adjustedX + adjustedSize / 2, adjustedY + adjustedSize / 2 + 2); ctx.fillStyle = isVeryDangerous ? "#ff0000" : "#fff"; ctx.beginPath(); ctx.arc(adjustedX + adjustedSize / 2 - 2, adjustedY + adjustedSize / 2 - 1, 1, 0, 2 * Math.PI); ctx.arc(adjustedX + adjustedSize / 2 + 2, adjustedY + adjustedSize / 2 - 1, 1, 0, 2 * Math.PI); ctx.fill(); } ctx.restore(); } }); });
-    
+    bots.forEach((bot) => {
+      const botRadius = SIZE / 2 + (bot.segments.length * 0.3); const isDangerous = botRadius > snakeRadius; const isVeryDangerous = bot.threatLevel >= 4; bot.segments.forEach((seg: { x: number; y: number }, i: number) => {
+        const screenX = seg.x - camera.x; const screenY = seg.y - camera.y; if (screenX > -SIZE * 2 && screenX < canvas.width + SIZE * 2 && screenY > -SIZE * 2 && screenY < canvas.height + SIZE * 2) {
+          ctx.save();
+          if (i === 0) {
+            // Sombra SÓLO en la cabeza
+            if (isVeryDangerous) { const pulse = Math.sin(performance.now() * 0.01) * 0.2 + 1; ctx.shadowColor = "#ff0000"; ctx.shadowBlur = 35 * pulse; ctx.scale(pulse, pulse); } else if (isDangerous) { ctx.shadowColor = "#ff4444"; ctx.shadowBlur = 25; } else { ctx.shadowColor = bot.color; ctx.shadowBlur = 15; }
+            ctx.fillStyle = isDangerous ? (isVeryDangerous ? "#ff0000" : "#ff4444") : bot.color;
+            ctx.lineWidth = isDangerous ? (isVeryDangerous ? 4 : 3) : 1;
+            ctx.strokeStyle = isDangerous ? "#ff0000" : bot.color;
+          } else {
+            // SIN SOMBRA para el cuerpo
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = `${bot.color}99`; // Un poco más de opacidad para que se vea bien
+          }
+          const adjustedSize = SIZE / (isVeryDangerous && i === 0 ? Math.sin(performance.now() * 0.01) * 0.2 + 1 : 1); const adjustedX = screenX / (isVeryDangerous && i === 0 ? Math.sin(performance.now() * 0.01) * 0.2 + 1 : 1); const adjustedY = screenY / (isVeryDangerous && i === 0 ? Math.sin(performance.now() * 0.01) * 0.2 + 1 : 1); ctx.beginPath(); ctx.arc(adjustedX + adjustedSize / 2, adjustedY + adjustedSize / 2, adjustedSize / 2, 0, 2 * Math.PI); ctx.fill(); if (i === 0 && isDangerous) { ctx.stroke(); } if (i === 0) { ctx.fillStyle = "#000"; ctx.font = "bold 8px Arial"; ctx.textAlign = "center"; ctx.fillText(bot.segments.length.toString(), adjustedX + adjustedSize / 2, adjustedY + adjustedSize / 2 + 2); ctx.fillStyle = isVeryDangerous ? "#ff0000" : "#fff"; ctx.beginPath(); ctx.arc(adjustedX + adjustedSize / 2 - 2, adjustedY + adjustedSize / 2 - 1, 1, 0, 2 * Math.PI); ctx.arc(adjustedX + adjustedSize / 2 + 2, adjustedY + adjustedSize / 2 - 1, 1, 0, 2 * Math.PI); ctx.fill(); } ctx.restore();
+        }
+      });
+    });
+
     // --- OPTIMIZACIÓN DE JUGADOR ---
-    snake.forEach((seg, i) => { const screenX = seg.x - camera.x; const screenY = seg.y - camera.y; ctx.save(); 
+    snake.forEach((seg, i) => {
+      const screenX = seg.x - camera.x; const screenY = seg.y - camera.y; ctx.save();
       if (i === 0) {
         // Sombra SÓLO en la cabeza
-        ctx.shadowColor = "#06b6d4"; 
-        ctx.shadowBlur = 32; 
+        ctx.shadowColor = "#06b6d4";
+        ctx.shadowBlur = 32;
         ctx.fillStyle = "#fff";
       } else {
         // SIN SOMBRA para el cuerpo
         ctx.shadowBlur = 0;
         ctx.fillStyle = "#06b6d4";
       }
-      ctx.beginPath(); ctx.arc(screenX + SIZE / 2, screenY + SIZE / 2, SIZE / 2, 0, 2 * Math.PI); ctx.fill(); if (i === 0) { ctx.fillStyle = "#000"; ctx.font = "bold 10px Arial"; ctx.textAlign = "center"; ctx.fillText(snake.length.toString(), screenX + SIZE / 2, screenY + SIZE / 2 + 3); } ctx.restore(); });
-    
+      ctx.beginPath(); ctx.arc(screenX + SIZE / 2, screenY + SIZE / 2, SIZE / 2, 0, 2 * Math.PI); ctx.fill(); if (i === 0) { ctx.fillStyle = "#000"; ctx.font = "bold 10px Arial"; ctx.textAlign = "center"; ctx.fillText(snake.length.toString(), screenX + SIZE / 2, screenY + SIZE / 2 + 3); } ctx.restore();
+    });
+
     if (isMobileDevice && touchControls.active) { ctx.save(); const pulseSize = 35 + Math.sin(performance.now() * 0.008) * 5; ctx.strokeStyle = "rgba(255, 255, 255, 0.8)"; ctx.fillStyle = "rgba(255, 255, 255, 0.1)"; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(touchControls.x, touchControls.y, pulseSize, 0, 2 * Math.PI); ctx.fill(); ctx.stroke(); ctx.fillStyle = "rgba(255, 255, 255, 0.9)"; ctx.beginPath(); ctx.arc(touchControls.x, touchControls.y, 4, 0, 2 * Math.PI); ctx.fill(); ctx.restore(); }
     if (gameOver) { ctx.save(); ctx.fillStyle = "rgba(0,0,0,0.8)"; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.font = isMobileDevice ? "bold 42px Arial" : "bold 56px Arial"; ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.shadowColor = "#f472b6"; ctx.shadowBlur = 20; ctx.fillText("Misión Terminada", canvas.width / 2, canvas.height / 2 - 40); ctx.font = isMobileDevice ? "bold 24px Arial" : "bold 32px Arial"; ctx.shadowBlur = 0; ctx.fillStyle = "#06b6d4"; ctx.fillText(`Puntos: ${score} | ${currentEnvironment.name}`, canvas.width / 2, canvas.height / 2 + (isMobileDevice ? 20 : 40)); ctx.restore(); }
   }, [snake, foods, bots, gameOver, dimensions, snakeRadius, isMobileDevice, touchControls, camera, currentEnvironment, stars, nebulaClouds]);
@@ -467,11 +481,11 @@ const GameBoard = () => {
     const nextThreshold = nextEnvironment.threshold;
     const scoreInLevel = score - currentThreshold;
     const levelTotalScore = nextThreshold - currentThreshold;
-    
+
     if (levelTotalScore > 0) {
       progressPercentage = Math.max(0, Math.min(100, (scoreInLevel / levelTotalScore) * 100));
     }
-    
+
     progressText = `${score} / ${nextThreshold}`;
     nextLevelText = `Próximo Nivel: ${nextEnvironment.name}`;
   } else {
@@ -546,7 +560,7 @@ const GameBoard = () => {
             {nextLevelText}
           </div>
           <div className="w-full bg-gray-800/80 rounded-full h-4 border-2 border-gray-600 shadow-lg relative overflow-hidden">
-            <div 
+            <div
               className="bg-gradient-to-r from-cyan-400 to-purple-500 h-full rounded-full transition-all duration-500 ease-out"
               style={{ width: `${progressPercentage}%` }}
             >
