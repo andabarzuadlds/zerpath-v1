@@ -510,7 +510,7 @@ const GameBoard = () => {
     stars.forEach((star) => { const screenX = star.x - camera.x; const screenY = star.y - camera.y; if (screenX > -10 && screenX < canvas.width + 10 && screenY > -10 && screenY < canvas.height + 10) { ctx.save(); ctx.globalAlpha = star.opacity; ctx.fillStyle = currentEnvironment.starColor; ctx.shadowColor = currentEnvironment.starColor; ctx.shadowBlur = star.size * 2; ctx.beginPath(); ctx.arc(screenX, screenY, star.size, 0, 2 * Math.PI); ctx.fill(); ctx.restore(); } });
     foods.forEach((food) => { const screenX = food.x - camera.x; const screenY = food.y - camera.y; if (screenX > -food.r * 2 && screenX < canvas.width + food.r * 2 && screenY > -food.r * 2 && screenY < canvas.height + food.r * 2) { ctx.save(); if (food.type === 'special') { const pulse = Math.sin(performance.now() * 0.005) * 0.3 + 1; ctx.shadowColor = food.color; ctx.shadowBlur = 25 * pulse; ctx.scale(pulse, pulse); ctx.strokeStyle = food.color; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc((screenX + food.r) / pulse, (screenY + food.r) / pulse, (food.r + 5) / pulse, 0, 2 * Math.PI); ctx.stroke(); } else { ctx.shadowColor = food.color; ctx.shadowBlur = 16; } ctx.fillStyle = food.color; ctx.beginPath(); ctx.arc((screenX + food.r) / (food.type === 'special' ? Math.sin(performance.now() * 0.005) * 0.3 + 1 : 1), (screenY + food.r) / (food.type === 'special' ? Math.sin(performance.now() * 0.005) * 0.3 + 1 : 1), food.r / (food.type === 'special' ? Math.sin(performance.now() * 0.005) * 0.3 + 1 : 1), 0, 2 * Math.PI); ctx.fill(); ctx.restore(); } });
 
-    // --- OPTIMIZACIÓN DE BOTS ---
+    // --- DIBUJADO DE BOTS (sin cambios) ---
     bots.forEach((bot) => {
       const botRadius = SIZE / 2 + (bot.segments.length * 0.3); const isDangerous = botRadius > snakeRadius; const isVeryDangerous = bot.threatLevel >= 4; bot.segments.forEach((seg: { x: number; y: number }, i: number) => {
         const screenX = seg.x - camera.x; const screenY = seg.y - camera.y; if (screenX > -SIZE * 2 && screenX < canvas.width + SIZE * 2 && screenY > -SIZE * 2 && screenY < canvas.height + SIZE * 2) {
@@ -531,6 +531,90 @@ const GameBoard = () => {
       });
     });
 
+    // --- DIBUJADO DE OTROS JUGADORES (CON INDICADORES) ---
+    otherPlayers.forEach((playerData, playerId) => {
+      if (playerData.head) {
+        const screenX = playerData.head.x - camera.x;
+        const screenY = playerData.head.y - camera.y;
+
+        // Comprobar si el jugador está en la pantalla
+        const isOnScreen = screenX > -SIZE && screenX < canvas.width && screenY > -SIZE && screenY < canvas.height;
+
+        if (isOnScreen) {
+          // Si está en pantalla, dibujarlo normalmente
+          ctx.save();
+          ctx.fillStyle = playerData.color || '#ff00ff';
+          ctx.shadowColor = playerData.color || '#ff00ff';
+          ctx.shadowBlur = 15;
+          ctx.beginPath();
+          ctx.arc(screenX + SIZE / 2, screenY + SIZE / 2, SIZE / 2, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.fillStyle = "#fff";
+          ctx.font = "bold 10px Arial";
+          ctx.textAlign = "center";
+          ctx.fillText(playerId, screenX + SIZE / 2, screenY - 5); // Nombre encima
+          ctx.restore();
+        } else {
+          // Si está fuera de pantalla, dibujar un indicador en el borde
+          ctx.save();
+          const angle = Math.atan2(screenY - canvas.height / 2, screenX - canvas.width / 2);
+          const radius = Math.min(canvas.width / 2, canvas.height / 2) * 0.9;
+          
+          const indicatorX = canvas.width / 2 + Math.cos(angle) * radius;
+          const indicatorY = canvas.height / 2 + Math.sin(angle) * radius;
+          
+          ctx.fillStyle = (playerData.color || '#ff00ff') + '99'; // Color con transparencia
+          ctx.beginPath();
+          ctx.arc(indicatorX, indicatorY, 12, 0, 2 * Math.PI);
+          ctx.fill();
+          
+          ctx.fillStyle = "#fff";
+          ctx.font = "bold 9px Arial";
+          ctx.textAlign = "center";
+          ctx.fillText(playerId.substring(0, 8), indicatorX, indicatorY + 3);
+          
+          const distance = Math.floor(dist(snake[0], playerData.head) / 100);
+          ctx.font = "8px Arial";
+          ctx.fillText(`${distance}m`, indicatorX, indicatorY + 14);
+          
+          ctx.restore();
+        }
+      }
+    });
+
+    // --- DIBUJADO DE TU PROPIA SERPIENTE (CON NOMBRE) ---
+    snake.forEach((seg, i) => {
+      const screenX = seg.x - camera.x; const screenY = seg.y - camera.y; ctx.save();
+      if (i === 0) {
+        ctx.shadowColor = "#06b6d4";
+        ctx.shadowBlur = 32;
+        ctx.fillStyle = "#fff";
+      } else {
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = "#06b6d4";
+      }
+      ctx.beginPath(); ctx.arc(screenX + SIZE / 2, screenY + SIZE / 2, SIZE / 2, 0, 2 * Math.PI); ctx.fill(); 
+      
+      if (i === 0) {
+        // Dibujar la longitud dentro de la cabeza
+        ctx.fillStyle = "#000"; 
+        ctx.font = "bold 10px Arial"; 
+        ctx.textAlign = "center"; 
+        ctx.fillText(snake.length.toString(), screenX + SIZE / 2, screenY + SIZE / 2 + 3);
+        
+        // Dibujar tu nombre de usuario encima de la cabeza
+        if (username) {
+          ctx.fillStyle = "#fff";
+          ctx.font = "bold 10px Arial";
+          ctx.textAlign = "center";
+          ctx.shadowColor = "#000";
+          ctx.shadowBlur = 5;
+          ctx.fillText(username, screenX + SIZE / 2, screenY - 8);
+        }
+      } 
+      ctx.restore();
+    });
+
     // --- OPTIMIZACIÓN DE JUGADOR ---
     snake.forEach((seg, i) => {
       const screenX = seg.x - camera.x; const screenY = seg.y - camera.y; ctx.save();
@@ -549,7 +633,7 @@ const GameBoard = () => {
 
     if (isMobileDevice && touchControls.active) { ctx.save(); const pulseSize = 35 + Math.sin(performance.now() * 0.008) * 5; ctx.strokeStyle = "rgba(255, 255, 255, 0.8)"; ctx.fillStyle = "rgba(255, 255, 255, 0.1)"; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(touchControls.x, touchControls.y, pulseSize, 0, 2 * Math.PI); ctx.fill(); ctx.stroke(); ctx.fillStyle = "rgba(255, 255, 255, 0.9)"; ctx.beginPath(); ctx.arc(touchControls.x, touchControls.y, 4, 0, 2 * Math.PI); ctx.fill(); ctx.restore(); }
     if (gameOver) { ctx.save(); ctx.fillStyle = "rgba(0,0,0,0.8)"; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.font = isMobileDevice ? "bold 42px Arial" : "bold 56px Arial"; ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.shadowColor = "#f472b6"; ctx.shadowBlur = 20; ctx.fillText("Misión Terminada", canvas.width / 2, canvas.height / 2 - 40); ctx.font = isMobileDevice ? "bold 24px Arial" : "bold 32px Arial"; ctx.shadowBlur = 0; ctx.fillStyle = "#06b6d4"; ctx.fillText(`Puntos: ${score} | ${currentEnvironment.name}`, canvas.width / 2, canvas.height / 2 + (isMobileDevice ? 20 : 40)); ctx.restore(); }
-  }, [snake, foods, bots, gameOver, dimensions, snakeRadius, isMobileDevice, touchControls, camera, currentEnvironment, stars, nebulaClouds]);
+  }, [snake, foods, bots, gameOver, dimensions, snakeRadius, isMobileDevice, touchControls, camera, currentEnvironment, stars, nebulaClouds, otherPlayers, username]); // <-- Asegúrate de añadir otherPlayers y username aquí
 
   const currentEnvIndex = ENVIRONMENTS.findIndex(env => env.id === currentEnvironment.id);
   const nextEnvironment = ENVIRONMENTS[currentEnvIndex + 1];
