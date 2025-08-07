@@ -1,7 +1,20 @@
+const path = require('path');
+
+// CORRECCIÓN: Buscar el archivo .env un nivel ARRIBA (en la raíz del proyecto)
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+
+// --- PASO DE DEPURACIÓN DEFINITIVO ---
+console.log('--- VERIFICANDO VARIABLES DE ENTORNO ---');
+console.log('REDIS_URL:', process.env.UPSTASH_REDIS_REST_URL ? '✅ CARGADO' : '❌ NO CARGADO');
+console.log('REDIS_TOKEN:', process.env.UPSTASH_REDIS_REST_TOKEN ? '✅ CARGADO' : '❌ NO CARGADO');
+console.log('ABLY_API_KEY:', process.env.ABLY_API_KEY ? '✅ CARGADO' : '❌ NO CARGADO');
+console.log('------------------------------------');
+// --- FIN DEL PASO DE DEPURACIÓN ---
+
 const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
-require('dotenv').config();
+const Ably = require('ably');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -11,14 +24,38 @@ app.use(express.json());
 
 const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
+const ABLY_API_KEY = process.env.ABLY_API_KEY;
 
-// ✅ VERIFICAR CONFIGURACIÓN AL INICIO
-if (!REDIS_URL || !REDIS_TOKEN) {
-  console.error('❌ Error: Variables de entorno de Redis no configuradas');
-  console.error('REDIS_URL:', REDIS_URL ? 'Configurado' : 'NO CONFIGURADO');
-  console.error('REDIS_TOKEN:', REDIS_TOKEN ? 'Configurado' : 'NO CONFIGURADO');
-  process.exit(1);
+// Si ABLY_API_KEY no se carga, el servidor no debe continuar.
+if (!ABLY_API_KEY) {
+  console.error('❌ CRÍTICO: La variable de entorno ABLY_API_KEY no está definida. El servidor no puede iniciar.');
+  process.exit(1); // Detiene el servidor si la clave no existe.
 }
+
+const ably = new Ably.Rest({ key: ABLY_API_KEY });
+
+// --- RUTA DE AUTENTICACIÓN CON ASYNC/AWAIT ---
+// Reescribimos la ruta para usar async/await, que es más robusto y moderno.
+app.get('/api/ably-auth', async (req, res) => {
+  console.log('🔑 Solicitando token de Ably (versión async)...');
+  const tokenParams = { clientId: `client-${Math.random().toString(36).substr(2, 9)}` };
+
+  try {
+    // Usamos la versión de la función que devuelve una Promesa.
+    // Pasamos las opciones de autenticación directamente aquí también.
+    const tokenRequest = await ably.auth.createTokenRequest(tokenParams, { key: ABLY_API_KEY });
+    
+    console.log('✅ Token de Ably generado exitosamente (async).');
+    res.setHeader('Content-Type', 'application/json');
+    res.send(JSON.stringify(tokenRequest));
+
+  } catch (err) {
+    // Si hay un error, lo capturamos aquí.
+    console.error('❌ Error solicitando token de Ably (async):', err);
+    res.status(500).send('Error solicitando token de Ably: ' + JSON.stringify(err));
+  }
+});
+// --- FIN DE LA LÓGICA DE ABLY ---
 
 // Función para hacer requests a Redis
 async function redisRequest(command) {
@@ -155,20 +192,20 @@ async function testRedisConnection() {
   }
 }
 
+// --- CAMBIOS PARA VERCEL ---
+
+// 1. QUITA TODO ESTE BLOQUE
+/*
 app.listen(PORT, async () => {
-  console.log(`🚀 Servidor Express corriendo en puerto ${PORT}`);
-  console.log(`📊 Redis URL: ${REDIS_URL}`);
-  console.log(`🔑 Redis Token: ${REDIS_TOKEN ? 'Configurado' : 'No configurado'}`);
-  
-  // Verificar conexión a Redis
-  const isRedisConnected = await testRedisConnection();
-  if (!isRedisConnected) {
-    console.error('⚠️  ADVERTENCIA: El servidor está funcionando pero Redis no está disponible');
-  }
-  
-  console.log('🌐 Endpoints disponibles:');
+  console.log(`✅ Servidor escuchando en http://localhost:${PORT}`);
+  console.log('Endpoints disponibles:');
   console.log('   GET  /api/test-redis');
+  console.log('   GET  /api/ably-auth');
   console.log('   GET  /api/player/:username/record');
   console.log('   POST /api/player/:username/record');
   console.log('   GET  /api/leaderboard/:limit?');
 });
+*/
+
+// 2. AÑADE ESTA LÍNEA AL FINAL DEL ARCHIVO
+module.exports = app;

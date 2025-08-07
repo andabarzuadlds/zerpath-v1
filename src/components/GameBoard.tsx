@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import Swal from "sweetalert2";
 import "sweetalert2/dist/sweetalert2.min.css";
+import * as Ably from 'ably';
 
 const SIZE = 14;
 const SPEED = 2.2;
@@ -115,6 +116,27 @@ const GameBoard = () => {
   const botGrowthTimerRef = useRef(0);
 
   const snakeRadius = useMemo(() => SIZE / 2 + (snake.length * 0.3), [snake.length]);
+
+  // --- CONEXIÓN A ABLY (USANDO TU API_URL) ---
+  useEffect(() => {
+    const ablyClient = new Ably.Realtime({
+      authUrl: `${API_URL}/ably-auth`
+    });
+
+    ablyClient.connection.on('connected', () => {
+      console.log('✅ Conectado a Ably a través de nuestro servidor!');
+    });
+
+    const channel = ablyClient.channels.get('game-room');
+
+    channel.subscribe('some-event', (message) => {
+      console.log('Mensaje recibido:', message.data);
+    });
+
+    return () => {
+      ablyClient.close();
+    };
+  }, []);
 
 
   useEffect(() => { setIsMobileDevice(isMobile()); }, []);
