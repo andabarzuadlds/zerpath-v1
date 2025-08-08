@@ -45,9 +45,9 @@ function randomBot(
   const baseLength = 8 + Math.floor(Math.random() * 20);
   const scaledLength = Math.floor(baseLength * environment.botSizeMultiplier);
 
-  let x: number, y: number; // <-- CORRECCIÓN: Añadir los tipos explícitos aquí.
+  let x: number, y: number;
   if (playerPosition && dimensions) {
-    // Aparecer en un radio máximo del 80% de la pantalla alrededor del jugador
+    // Bots Aparecen en un radio máximo del 80% de la pantalla alrededor del jugador
     const maxSpawnDistance = Math.min(dimensions.width, dimensions.height) * 0.8;
     const minSpawnDistance = 150; // Distancia mínima para no aparecer encima
     const angle = Math.random() * 2 * Math.PI;
@@ -59,7 +59,7 @@ function randomBot(
     x = Math.max(0, Math.min(worldSize, x));
     y = Math.max(0, Math.min(worldSize, y));
   } else {
-    // Lógica anterior como fallback
+    // Fallback
     x = Math.random() * (worldSize - 600) + 300;
     y = Math.random() * (worldSize - 600) + 300;
   }
@@ -106,8 +106,6 @@ const GameBoard = () => {
   const [topFive, setTopFive] = useState<Array<{ username: string, score: number }>>([]);
   const [connectedPlayers, setConnectedPlayers] = useState<string[]>([]);
   const [otherPlayers, setOtherPlayers] = useState<Map<string, any>>(new Map());
-
-  // --- AÑADIR ESTAS LÍNEAS PARA CORREGIR LOS ERRORES ---
   const target = useRef({ x: WORLD_SIZE / 2, y: WORLD_SIZE / 2 });
   const angleRef = useRef(0);
   const [isMoving, setIsMoving] = useState(false);
@@ -117,12 +115,10 @@ const GameBoard = () => {
   const [touchControls, setTouchControls] = useState({ x: 0, y: 0, active: false });
   const [showMobileUI, setShowMobileUI] = useState(true);
   const botGrowthTimerRef = useRef(performance.now());
-  // --- FIN DEL BLOQUE A AÑADIR ---
-
   const isMobileDevice = isMobile();
   const snakeRadius = useMemo(() => SIZE / 2 + (snake.length * 0.3), [snake.length]);
 
-  // --- CONEXIÓN A ABLY (CON SINCRONIZACIÓN DE ESTADO) ---
+  // --- CONEXIÓN A ABLY ---
   useEffect(() => {
     if (!username) return;
 
@@ -133,7 +129,6 @@ const GameBoard = () => {
 
     const channel = ablyClient.channels.get('game-room');
 
-    // --- Lógica de Presencia (sin cambios) ---
     channel.presence.subscribe('enter', (member) => {
       setConnectedPlayers(prev => [...prev, member.clientId].sort());
     });
@@ -142,7 +137,7 @@ const GameBoard = () => {
       setConnectedPlayers(prev => prev.filter(id => id !== member.clientId));
     });
 
-    // Obtenemos la lista inicial de miembros y entramos en el set de presencia
+    // Obtenemos la lista inicial de miembros
     (async () => {
       const initialMembers = await channel.presence.get();
       setConnectedPlayers(initialMembers.map(member => member.clientId).sort());
@@ -154,7 +149,6 @@ const GameBoard = () => {
     
     // A. Suscribirse a las actualizaciones de otros jugadores
     channel.subscribe('player-update', (message) => {
-      // Ignoramos nuestros propios mensajes
       if (message.clientId === username) return;
 
       setOtherPlayers(prev => {
@@ -197,9 +191,7 @@ const GameBoard = () => {
       channel.presence.leave();
       ablyClient.close();
     };
-  }, [username, snake]); // <-- Ahora depende de 'snake' para publicar la posición actualizada
-
-  // Removed erroneous useEffect for setIsMobileDevice
+  }, [username, snake]);
 
   useEffect(() => {
     const generateStars = () => setStars(Array.from({ length: 300 }, () => ({ x: Math.random() * WORLD_SIZE, y: Math.random() * WORLD_SIZE, size: Math.random() * 3 + 1, opacity: Math.random() * 0.8 + 0.2 })));
@@ -247,7 +239,7 @@ const GameBoard = () => {
         const threatEmoji = '⚠️'.repeat(newEnvironment.threatLevel);
         const toast = document.createElement('div');
 
-        // Estilos para la notificación tipo Toast en la esquina superior izquierda
+        // Estilos Notificacion de cambio de Nivel
         toast.style.position = 'fixed';
         toast.style.top = '20px';
         toast.style.left = '20px';
@@ -284,7 +276,7 @@ const GameBoard = () => {
             if (document.body.contains(toast)) {
               document.body.removeChild(toast);
             }
-          }, 500); // Esperar a que la transición de salida termine
+          }, 500);
         }, 4000);
       }
     }
@@ -350,7 +342,6 @@ const GameBoard = () => {
 
   useEffect(() => { const arr = []; for (let i = 0; i < FOOD_COUNT; i++) { arr.push(randomFood(WORLD_SIZE, currentEnvironment)); } setFoods(arr); }, [currentEnvironment]);
 
-  // Corregido: Este useEffect ahora se ejecuta solo una vez al montar el componente.
   useEffect(() => {
     const initialPlayerPosition = { x: WORLD_SIZE / 2, y: WORLD_SIZE / 2 };
     const initialDimensions = { width: Math.max(800, window.innerWidth), height: Math.max(600, window.innerHeight) };
@@ -386,10 +377,9 @@ const GameBoard = () => {
               // Perseguir al jugador
               const targetAngle = Math.atan2(playerHead.y - botHead.y, playerHead.x - botHead.x);
               const diff = ((targetAngle - angle + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
-              const turnSpeed = 0.01 * threatLevel; // Giran más rápido en niveles altos
+              const turnSpeed = 0.01 * threatLevel;
               angle += diff * turnSpeed;
             } else {
-              // Deambular si el jugador está lejos
               if (Math.random() < 0.02) {
                 angle += (Math.random() - 0.5) * 0.5;
               }
@@ -437,7 +427,7 @@ const GameBoard = () => {
             while (newBots.length < currentEnvironment.botCount) {
               // Contamos cuántos bots están actualmente cerca del jugador.
               const nearbyBotsCount = newBots.filter(b => {
-                const detectionRadius = 250 + b.threatLevel * 150; // Usamos el radio de detección como "cercanía"
+                const detectionRadius = 250 + b.threatLevel * 150;
                 return dist(b.segments[0], head) < detectionRadius;
               }).length;
               // Si hay menos de 3 bots cerca, el nuevo bot aparecerá cerca. De lo contrario, aleatorio.
@@ -510,28 +500,27 @@ const GameBoard = () => {
     stars.forEach((star) => { const screenX = star.x - camera.x; const screenY = star.y - camera.y; if (screenX > -10 && screenX < canvas.width + 10 && screenY > -10 && screenY < canvas.height + 10) { ctx.save(); ctx.globalAlpha = star.opacity; ctx.fillStyle = currentEnvironment.starColor; ctx.shadowColor = currentEnvironment.starColor; ctx.shadowBlur = star.size * 2; ctx.beginPath(); ctx.arc(screenX, screenY, star.size, 0, 2 * Math.PI); ctx.fill(); ctx.restore(); } });
     foods.forEach((food) => { const screenX = food.x - camera.x; const screenY = food.y - camera.y; if (screenX > -food.r * 2 && screenX < canvas.width + food.r * 2 && screenY > -food.r * 2 && screenY < canvas.height + food.r * 2) { ctx.save(); if (food.type === 'special') { const pulse = Math.sin(performance.now() * 0.005) * 0.3 + 1; ctx.shadowColor = food.color; ctx.shadowBlur = 25 * pulse; ctx.scale(pulse, pulse); ctx.strokeStyle = food.color; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc((screenX + food.r) / pulse, (screenY + food.r) / pulse, (food.r + 5) / pulse, 0, 2 * Math.PI); ctx.stroke(); } else { ctx.shadowColor = food.color; ctx.shadowBlur = 16; } ctx.fillStyle = food.color; ctx.beginPath(); ctx.arc((screenX + food.r) / (food.type === 'special' ? Math.sin(performance.now() * 0.005) * 0.3 + 1 : 1), (screenY + food.r) / (food.type === 'special' ? Math.sin(performance.now() * 0.005) * 0.3 + 1 : 1), food.r / (food.type === 'special' ? Math.sin(performance.now() * 0.005) * 0.3 + 1 : 1), 0, 2 * Math.PI); ctx.fill(); ctx.restore(); } });
 
-    // --- DIBUJADO DE BOTS (sin cambios) ---
+    // --- DIBUJADO DE BOTS ---
     bots.forEach((bot) => {
       const botRadius = SIZE / 2 + (bot.segments.length * 0.3); const isDangerous = botRadius > snakeRadius; const isVeryDangerous = bot.threatLevel >= 4; bot.segments.forEach((seg: { x: number; y: number }, i: number) => {
         const screenX = seg.x - camera.x; const screenY = seg.y - camera.y; if (screenX > -SIZE * 2 && screenX < canvas.width + SIZE * 2 && screenY > -SIZE * 2 && screenY < canvas.height + SIZE * 2) {
           ctx.save();
           if (i === 0) {
-            // Sombra SÓLO en la cabeza
+            // Sombra en cabeza de Snake
             if (isVeryDangerous) { const pulse = Math.sin(performance.now() * 0.01) * 0.2 + 1; ctx.shadowColor = "#ff0000"; ctx.shadowBlur = 35 * pulse; ctx.scale(pulse, pulse); } else if (isDangerous) { ctx.shadowColor = "#ff4444"; ctx.shadowBlur = 25; } else { ctx.shadowColor = bot.color; ctx.shadowBlur = 15; }
             ctx.fillStyle = isDangerous ? (isVeryDangerous ? "#ff0000" : "#ff4444") : bot.color;
             ctx.lineWidth = isDangerous ? (isVeryDangerous ? 4 : 3) : 1;
             ctx.strokeStyle = isDangerous ? "#ff0000" : bot.color;
           } else {
-            // SIN SOMBRA para el cuerpo
             ctx.shadowBlur = 0;
-            ctx.fillStyle = `${bot.color}99`; // Un poco más de opacidad para que se vea bien
+            ctx.fillStyle = `${bot.color}99`;
           }
           const adjustedSize = SIZE / (isVeryDangerous && i === 0 ? Math.sin(performance.now() * 0.01) * 0.2 + 1 : 1); const adjustedX = screenX / (isVeryDangerous && i === 0 ? Math.sin(performance.now() * 0.01) * 0.2 + 1 : 1); const adjustedY = screenY / (isVeryDangerous && i === 0 ? Math.sin(performance.now() * 0.01) * 0.2 + 1 : 1); ctx.beginPath(); ctx.arc(adjustedX + adjustedSize / 2, adjustedY + adjustedSize / 2, adjustedSize / 2, 0, 2 * Math.PI); ctx.fill(); if (i === 0 && isDangerous) { ctx.stroke(); } if (i === 0) { ctx.fillStyle = "#000"; ctx.font = "bold 8px Arial"; ctx.textAlign = "center"; ctx.fillText(bot.segments.length.toString(), adjustedX + adjustedSize / 2, adjustedY + adjustedSize / 2 + 2); ctx.fillStyle = isVeryDangerous ? "#ff0000" : "#fff"; ctx.beginPath(); ctx.arc(adjustedX + adjustedSize / 2 - 2, adjustedY + adjustedSize / 2 - 1, 1, 0, 2 * Math.PI); ctx.arc(adjustedX + adjustedSize / 2 + 2, adjustedY + adjustedSize / 2 - 1, 1, 0, 2 * Math.PI); ctx.fill(); } ctx.restore();
         }
       });
     });
 
-    // --- DIBUJADO DE OTROS JUGADORES (CON INDICADORES) ---
+    // --- DIBUJADO DE OTROS JUGADORES ---
     otherPlayers.forEach((playerData, playerId) => {
       if (playerData.head) {
         const screenX = playerData.head.x - camera.x;
@@ -552,7 +541,7 @@ const GameBoard = () => {
           ctx.fillStyle = "#fff";
           ctx.font = "bold 10px Arial";
           ctx.textAlign = "center";
-          ctx.fillText(playerId, screenX + SIZE / 2, screenY - 5); // Nombre encima
+          ctx.fillText(playerId, screenX + SIZE / 2, screenY - 5);
           ctx.restore();
         } else {
           // Si está fuera de pantalla, dibujar un indicador en el borde
@@ -563,7 +552,7 @@ const GameBoard = () => {
           const indicatorX = canvas.width / 2 + Math.cos(angle) * radius;
           const indicatorY = canvas.height / 2 + Math.sin(angle) * radius;
           
-          ctx.fillStyle = (playerData.color || '#ff00ff') + '99'; // Color con transparencia
+          ctx.fillStyle = (playerData.color || '#ff00ff') + '99';
           ctx.beginPath();
           ctx.arc(indicatorX, indicatorY, 12, 0, 2 * Math.PI);
           ctx.fill();
@@ -582,7 +571,7 @@ const GameBoard = () => {
       }
     });
 
-    // --- DIBUJADO DE TU PROPIA SERPIENTE (CON NOMBRE) ---
+    // --- DIBUJADO DE TU PROPIA SERPIENTE ---
     snake.forEach((seg, i) => {
       const screenX = seg.x - camera.x; const screenY = seg.y - camera.y; ctx.save();
       if (i === 0) {
@@ -596,7 +585,6 @@ const GameBoard = () => {
       ctx.beginPath(); ctx.arc(screenX + SIZE / 2, screenY + SIZE / 2, SIZE / 2, 0, 2 * Math.PI); ctx.fill(); 
       
       if (i === 0) {
-        // Dibujar la longitud dentro de la cabeza
         ctx.fillStyle = "#000"; 
         ctx.font = "bold 10px Arial"; 
         ctx.textAlign = "center"; 
@@ -619,12 +607,10 @@ const GameBoard = () => {
     snake.forEach((seg, i) => {
       const screenX = seg.x - camera.x; const screenY = seg.y - camera.y; ctx.save();
       if (i === 0) {
-        // Sombra SÓLO en la cabeza
         ctx.shadowColor = "#06b6d4";
         ctx.shadowBlur = 32;
         ctx.fillStyle = "#fff";
       } else {
-        // SIN SOMBRA para el cuerpo
         ctx.shadowBlur = 0;
         ctx.fillStyle = "#06b6d4";
       }
@@ -633,7 +619,7 @@ const GameBoard = () => {
 
     if (isMobileDevice && touchControls.active) { ctx.save(); const pulseSize = 35 + Math.sin(performance.now() * 0.008) * 5; ctx.strokeStyle = "rgba(255, 255, 255, 0.8)"; ctx.fillStyle = "rgba(255, 255, 255, 0.1)"; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(touchControls.x, touchControls.y, pulseSize, 0, 2 * Math.PI); ctx.fill(); ctx.stroke(); ctx.fillStyle = "rgba(255, 255, 255, 0.9)"; ctx.beginPath(); ctx.arc(touchControls.x, touchControls.y, 4, 0, 2 * Math.PI); ctx.fill(); ctx.restore(); }
     if (gameOver) { ctx.save(); ctx.fillStyle = "rgba(0,0,0,0.8)"; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.font = isMobileDevice ? "bold 42px Arial" : "bold 56px Arial"; ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.shadowColor = "#f472b6"; ctx.shadowBlur = 20; ctx.fillText("Misión Terminada", canvas.width / 2, canvas.height / 2 - 40); ctx.font = isMobileDevice ? "bold 24px Arial" : "bold 32px Arial"; ctx.shadowBlur = 0; ctx.fillStyle = "#06b6d4"; ctx.fillText(`Puntos: ${score} | ${currentEnvironment.name}`, canvas.width / 2, canvas.height / 2 + (isMobileDevice ? 20 : 40)); ctx.restore(); }
-  }, [snake, foods, bots, gameOver, dimensions, snakeRadius, isMobileDevice, touchControls, camera, currentEnvironment, stars, nebulaClouds, otherPlayers, username]); // <-- Asegúrate de añadir otherPlayers y username aquí
+  }, [snake, foods, bots, gameOver, dimensions, snakeRadius, isMobileDevice, touchControls, camera, currentEnvironment, stars, nebulaClouds, otherPlayers, username]);
 
   const currentEnvIndex = ENVIRONMENTS.findIndex(env => env.id === currentEnvironment.id);
   const nextEnvironment = ENVIRONMENTS[currentEnvIndex + 1];
