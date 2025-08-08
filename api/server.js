@@ -194,20 +194,22 @@ async function testRedisConnection() {
   }
 }
 
-// --- CAMBIOS PARA VERCEL ---
+// --- CAMBIOS PARA VERCEL Y LOCAL ---
 
-// 1. QUITA TODO ESTE BLOQUE
-/*
-app.listen(PORT, async () => {
-  console.log(`✅ Servidor escuchando en http://localhost:${PORT}`);
-  console.log('Endpoints disponibles:');
-  console.log('   GET  /api/test-redis');
-  console.log('   GET  /api/ably-auth');
-  console.log('   GET  /api/player/:username/record');
-  console.log('   POST /api/player/:username/record');
-  console.log('   GET  /api/leaderboard/:limit?');
-});
-*/
+// Vercel detecta automáticamente la exportación del 'app' de Express.
+// Para desarrollo local, necesitamos iniciar el servidor manualmente.
+// El entorno de Vercel define la variable 'VERCEL_ENV'.
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, async () => {
+    console.log(`✅ Servidor de desarrollo escuchando en http://localhost:${PORT}`);
+    await testRedisConnection();
+    console.log('Endpoints disponibles:');
+    console.log('   GET  /api/test-redis');
+    console.log('   GET  /api/ably-auth');
+    console.log('   GET  /api/player/:username/record');
+    console.log('   POST /api/player/:username/record');
+    console.log('   GET  /api/leaderboard/:limit?');
+  });
+}
 
-// 2. AÑADE ESTA LÍNEA AL FINAL DEL ARCHIVO
 module.exports = app;
