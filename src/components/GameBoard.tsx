@@ -118,39 +118,47 @@ const GameBoard = () => {
   const isMobileDevice = isMobile();
   const snakeRadius = useMemo(() => SIZE / 2 + (snake.length * 0.3), [snake.length]);
 
-  // --- CONEXIÓN A ABLY ---
+  // Esto evita que se re-creen en cada renderizado.
+  const ablyClientRef = useRef<Ably.Realtime | null>(null);
+  const ablyChannelRef = useRef<Ably.RealtimeChannel | null>(null);
+  // Solo se ejecuta una vez cuando el `username` está disponible.
   useEffect(() => {
-    if (!username) return;
+    if (!username || ablyClientRef.current) return;
 
     const ablyClient = new Ably.Realtime({
       authUrl: `${API_URL}/ably-auth`,
       authParams: { clientId: username }
     });
+    ablyClientRef.current = ablyClient;
 
     const channel = ablyClient.channels.get('game-room');
+    ablyChannelRef.current = channel;
+
+    const handleLeave = (memberId: string) => {
+      setOtherPlayers(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(memberId);
+        return newMap;
+      });
+    };
 
     channel.presence.subscribe('enter', (member) => {
-      setConnectedPlayers(prev => [...prev, member.clientId].sort());
+      setConnectedPlayers(prev => [...new Set([...prev, member.clientId])].sort());
     });
 
     channel.presence.subscribe('leave', (member) => {
       setConnectedPlayers(prev => prev.filter(id => id !== member.clientId));
+      handleLeave(member.clientId);
     });
 
-    // Obtenemos la lista inicial de miembros
     (async () => {
       const initialMembers = await channel.presence.get();
       setConnectedPlayers(initialMembers.map(member => member.clientId).sort());
       await channel.presence.enter();
     })();
 
-
-    // --- 2. LÓGICA DE SINCRONIZACIÓN DE ESTADO ---
-    
-    // A. Suscribirse a las actualizaciones de otros jugadores
     channel.subscribe('player-update', (message) => {
       if (message.clientId === username) return;
-
       setOtherPlayers(prev => {
         const newMap = new Map(prev);
         if (typeof message.clientId === 'string') {
@@ -160,38 +168,36 @@ const GameBoard = () => {
       });
     });
 
-    // B. Publicar nuestra posición a intervalos
+    return () => {
+      if (ablyClientRef.current) {
+        ablyClientRef.current.close();
+        ablyClientRef.current = null;
+      }
+    };
+  }, [username]);
+
+  // CAMBIO: Este useEffect se encarga de publicar la posición del jugador.
+  // Se ejecuta cuando el canal de Ably está listo y se actualiza si `snake` cambia.
+  useEffect(() => {
+    if (!ablyChannelRef.current || !username) return;
+
+    const channel = ablyChannelRef.current;
     const publishInterval = setInterval(() => {
       if (snake.length > 0) {
         channel.publish('player-update', {
           id: username,
-          head: snake[0], // Enviamos solo la cabeza por eficiencia
+          head: snake[0],
           length: snake.length,
-          color: '#06b6d4' // Tu color
+          color: '#06b6d4'
         });
       }
     }, 100); // Publicar 10 veces por segundo
 
-    // C. Limpiar al desconectar
-    const handleLeave = (memberId: string) => {
-      setOtherPlayers(prev => {
-        const newMap = new Map(prev);
-        newMap.delete(memberId);
-        return newMap;
-      });
-    };
-    channel.presence.subscribe('leave', (member) => {
-      setConnectedPlayers(prev => prev.filter(id => id !== member.clientId));
-      handleLeave(member.clientId); // Limpiamos sus datos cuando se van
-    });
-
-
     return () => {
-      clearInterval(publishInterval); // Limpiamos el intervalo
-      channel.presence.leave();
-      ablyClient.close();
+      clearInterval(publishInterval);
     };
-  }, [username, snake]);
+  }, [snake, username]);
+
 
   useEffect(() => {
     const generateStars = () => setStars(Array.from({ length: 300 }, () => ({ x: Math.random() * WORLD_SIZE, y: Math.random() * WORLD_SIZE, size: Math.random() * 3 + 1, opacity: Math.random() * 0.8 + 0.2 })));
@@ -228,7 +234,6 @@ const GameBoard = () => {
             length: newSegments.length
           };
         });
-        // Si el nuevo límite de bots es menor, eliminamos los sobrantes.
         if (updatedBots.length > newEnvironment.botCount) {
           updatedBots = updatedBots.slice(0, newEnvironment.botCount);
         }
@@ -239,7 +244,6 @@ const GameBoard = () => {
         const threatEmoji = '⚠️'.repeat(newEnvironment.threatLevel);
         const toast = document.createElement('div');
 
-        // Estilos Notificacion de cambio de Nivel
         toast.style.position = 'fixed';
         toast.style.top = '20px';
         toast.style.left = '20px';
@@ -252,7 +256,7 @@ const GameBoard = () => {
         toast.style.zIndex = '1000';
         toast.style.backdropFilter = 'blur(8px)';
         toast.style.transition = 'transform 0.5s ease-in-out';
-        toast.style.transform = 'translateX(-120%)'; // Posición inicial fuera de la pantalla
+        toast.style.transform = 'translateX(-120%)';
 
         toast.innerHTML = `
           <div style="font-size: 18px; font-weight: bold; margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
@@ -264,12 +268,10 @@ const GameBoard = () => {
 
         document.body.appendChild(toast);
 
-        // Animar la entrada
         setTimeout(() => {
           toast.style.transform = 'translateX(0)';
         }, 100);
 
-        // Animar la salida y eliminar el elemento después de 4 segundos
         setTimeout(() => {
           toast.style.transform = 'translateX(-120%)';
           setTimeout(() => {
@@ -348,7 +350,6 @@ const GameBoard = () => {
     const arr = [];
     const initialBotCount = ENVIRONMENTS[0].botCount;
     for (let i = 0; i < initialBotCount; i++) {
-      // Solo los primeros 3 bots aparecen cerca del jugador.
       const spawnNear = i < 3;
       arr.push(randomBot(WORLD_SIZE, ENVIRONMENTS[0], spawnNear ? initialPlayerPosition : undefined, spawnNear ? initialDimensions : undefined));
     }
@@ -370,11 +371,9 @@ const GameBoard = () => {
             const botHead = segments[0];
             const distanceToPlayer = dist(botHead, playerHead);
 
-            // IA de Persecución: Radio de detección y agresividad basados en threatLevel
             const detectionRadius = 250 + threatLevel * 150;
 
             if (distanceToPlayer < detectionRadius) {
-              // Perseguir al jugador
               const targetAngle = Math.atan2(playerHead.y - botHead.y, playerHead.x - botHead.x);
               const diff = ((targetAngle - angle + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
               const turnSpeed = 0.01 * threatLevel;
@@ -385,7 +384,6 @@ const GameBoard = () => {
               }
             }
 
-            // La velocidad del bot ahora se ve afectada por el multiplicador del ambiente.
             const currentBotSpeed = SPEED * 0.4 * speedMultiplier;
             const newHead = { x: botHead.x + Math.cos(angle) * currentBotSpeed, y: botHead.y + Math.sin(angle) * currentBotSpeed, };
             if (newHead.x < 0) newHead.x = WORLD_SIZE; if (newHead.x > WORLD_SIZE) newHead.x = 0; if (newHead.y < 0) newHead.y = WORLD_SIZE; if (newHead.y > WORLD_SIZE) newHead.y = 0;
@@ -401,12 +399,10 @@ const GameBoard = () => {
           const distanceToTarget = dist(headCenter, target.current);
           const currentSpeed = SPEED * currentEnvironment.playerSpeedMultiplier;
 
-          // Si la cabeza está en el objetivo (o muy cerca), no te muevas.
           if (distanceToTarget < currentSpeed) {
             return prev;
           }
 
-          // Si nos movemos, calculamos el ángulo hacia el cursor
           const dx = target.current.x - headCenter.x;
           const dy = target.current.y - headCenter.y;
           const targetAngle = Math.atan2(dy, dx);
@@ -425,12 +421,10 @@ const GameBoard = () => {
           setBots((currentBots) => {
             let shouldDie = false; const newBots = currentBots.filter((bot) => { const botRadius = SIZE / 2 + (bot.segments.length * 0.3); let botShouldBeRemoved = false; for (let i = 0; i < bot.segments.length; i++) { const botSegment = bot.segments[i]; const distance = dist({ x: head.x + SIZE / 2, y: head.y + SIZE / 2 }, { x: botSegment.x + SIZE / 2, y: botSegment.y + SIZE / 2 }); if (distance < SIZE * 1.2) { if (i === 0) { if (currentSnakeRadius > botRadius) { setPendingGrowth(prev => prev + bot.segments.length); setScore((s) => s + bot.segments.length); botShouldBeRemoved = true; } else { shouldDie = true; } } else { setPendingGrowth(prev => prev + bot.segments.length); setScore((s) => s + bot.segments.length); botShouldBeRemoved = true; } break; } } return !botShouldBeRemoved; }); if (shouldDie) { setGameOver(true); setPendingGrowth(0); }
             while (newBots.length < currentEnvironment.botCount) {
-              // Contamos cuántos bots están actualmente cerca del jugador.
               const nearbyBotsCount = newBots.filter(b => {
                 const detectionRadius = 250 + b.threatLevel * 150;
                 return dist(b.segments[0], head) < detectionRadius;
               }).length;
-              // Si hay menos de 3 bots cerca, el nuevo bot aparecerá cerca. De lo contrario, aleatorio.
               const shouldSpawnNear = nearbyBotsCount < 3;
               newBots.push(randomBot(WORLD_SIZE, currentEnvironment, shouldSpawnNear ? head : undefined, shouldSpawnNear ? dimensions : undefined));
             }
@@ -460,7 +454,6 @@ const GameBoard = () => {
           setLocalRecords(localRecords);
         }
       }
-      // Siempre actualiza el top 5 al final de la partida.
       await updateTopFive();
     }
     saveScore();
@@ -482,7 +475,6 @@ const GameBoard = () => {
     const playerPosition = { x: WORLD_SIZE / 2, y: WORLD_SIZE / 2 };
     const initialBotCount = ENVIRONMENTS[0].botCount;
     for (let i = 0; i < initialBotCount; i++) {
-      // Solo los primeros 3 bots aparecen cerca del jugador.
       const spawnNear = i < 3;
       arrBots.push(randomBot(WORLD_SIZE, ENVIRONMENTS[0], spawnNear ? playerPosition : undefined, spawnNear ? dimensions : undefined));
     }
@@ -500,13 +492,11 @@ const GameBoard = () => {
     stars.forEach((star) => { const screenX = star.x - camera.x; const screenY = star.y - camera.y; if (screenX > -10 && screenX < canvas.width + 10 && screenY > -10 && screenY < canvas.height + 10) { ctx.save(); ctx.globalAlpha = star.opacity; ctx.fillStyle = currentEnvironment.starColor; ctx.shadowColor = currentEnvironment.starColor; ctx.shadowBlur = star.size * 2; ctx.beginPath(); ctx.arc(screenX, screenY, star.size, 0, 2 * Math.PI); ctx.fill(); ctx.restore(); } });
     foods.forEach((food) => { const screenX = food.x - camera.x; const screenY = food.y - camera.y; if (screenX > -food.r * 2 && screenX < canvas.width + food.r * 2 && screenY > -food.r * 2 && screenY < canvas.height + food.r * 2) { ctx.save(); if (food.type === 'special') { const pulse = Math.sin(performance.now() * 0.005) * 0.3 + 1; ctx.shadowColor = food.color; ctx.shadowBlur = 25 * pulse; ctx.scale(pulse, pulse); ctx.strokeStyle = food.color; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc((screenX + food.r) / pulse, (screenY + food.r) / pulse, (food.r + 5) / pulse, 0, 2 * Math.PI); ctx.stroke(); } else { ctx.shadowColor = food.color; ctx.shadowBlur = 16; } ctx.fillStyle = food.color; ctx.beginPath(); ctx.arc((screenX + food.r) / (food.type === 'special' ? Math.sin(performance.now() * 0.005) * 0.3 + 1 : 1), (screenY + food.r) / (food.type === 'special' ? Math.sin(performance.now() * 0.005) * 0.3 + 1 : 1), food.r / (food.type === 'special' ? Math.sin(performance.now() * 0.005) * 0.3 + 1 : 1), 0, 2 * Math.PI); ctx.fill(); ctx.restore(); } });
 
-    // --- DIBUJADO DE BOTS ---
     bots.forEach((bot) => {
       const botRadius = SIZE / 2 + (bot.segments.length * 0.3); const isDangerous = botRadius > snakeRadius; const isVeryDangerous = bot.threatLevel >= 4; bot.segments.forEach((seg: { x: number; y: number }, i: number) => {
         const screenX = seg.x - camera.x; const screenY = seg.y - camera.y; if (screenX > -SIZE * 2 && screenX < canvas.width + SIZE * 2 && screenY > -SIZE * 2 && screenY < canvas.height + SIZE * 2) {
           ctx.save();
           if (i === 0) {
-            // Sombra en cabeza de Snake
             if (isVeryDangerous) { const pulse = Math.sin(performance.now() * 0.01) * 0.2 + 1; ctx.shadowColor = "#ff0000"; ctx.shadowBlur = 35 * pulse; ctx.scale(pulse, pulse); } else if (isDangerous) { ctx.shadowColor = "#ff4444"; ctx.shadowBlur = 25; } else { ctx.shadowColor = bot.color; ctx.shadowBlur = 15; }
             ctx.fillStyle = isDangerous ? (isVeryDangerous ? "#ff0000" : "#ff4444") : bot.color;
             ctx.lineWidth = isDangerous ? (isVeryDangerous ? 4 : 3) : 1;
@@ -520,17 +510,14 @@ const GameBoard = () => {
       });
     });
 
-    // --- DIBUJADO DE OTROS JUGADORES ---
     otherPlayers.forEach((playerData, playerId) => {
       if (playerData.head) {
         const screenX = playerData.head.x - camera.x;
         const screenY = playerData.head.y - camera.y;
 
-        // Comprobar si el jugador está en la pantalla
         const isOnScreen = screenX > -SIZE && screenX < canvas.width && screenY > -SIZE && screenY < canvas.height;
 
         if (isOnScreen) {
-          // Si está en pantalla, dibujarlo normalmente
           ctx.save();
           ctx.fillStyle = playerData.color || '#ff00ff';
           ctx.shadowColor = playerData.color || '#ff00ff';
@@ -544,7 +531,6 @@ const GameBoard = () => {
           ctx.fillText(playerId, screenX + SIZE / 2, screenY - 5);
           ctx.restore();
         } else {
-          // Si está fuera de pantalla, dibujar un indicador en el borde
           ctx.save();
           const angle = Math.atan2(screenY - canvas.height / 2, screenX - canvas.width / 2);
           const radius = Math.min(canvas.width / 2, canvas.height / 2) * 0.9;
@@ -571,7 +557,6 @@ const GameBoard = () => {
       }
     });
 
-    // --- DIBUJADO DE TU PROPIA SERPIENTE ---
     snake.forEach((seg, i) => {
       const screenX = seg.x - camera.x; const screenY = seg.y - camera.y; ctx.save();
       if (i === 0) {
@@ -590,7 +575,6 @@ const GameBoard = () => {
         ctx.textAlign = "center"; 
         ctx.fillText(snake.length.toString(), screenX + SIZE / 2, screenY + SIZE / 2 + 3);
         
-        // Dibujar tu nombre de usuario encima de la cabeza
         if (username) {
           ctx.fillStyle = "#fff";
           ctx.font = "bold 10px Arial";
@@ -603,7 +587,6 @@ const GameBoard = () => {
       ctx.restore();
     });
 
-    // --- OPTIMIZACIÓN DE JUGADOR ---
     snake.forEach((seg, i) => {
       const screenX = seg.x - camera.x; const screenY = seg.y - camera.y; ctx.save();
       if (i === 0) {
@@ -684,7 +667,6 @@ const GameBoard = () => {
       )}
       {!isMobileDevice && (
         <>
-          {/* 5. NUEVO COMPONENTE: LISTA DE JUGADORES CONECTADOS */}
           <div className="absolute top-4 left-4 z-20 min-w-[220px] bg-black/90 border-2 border-green-400 rounded-lg p-3 shadow-2xl backdrop-blur-sm">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-green-400 text-sm">🟢</span>
